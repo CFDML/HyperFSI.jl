@@ -1,6 +1,6 @@
 @testitem "Post2D" begin
     using  HyperFSI: Post2D
-    mesh_file = "/Users/shiweihu/Codes/Develops/HyperFSI/test/test_data/squ.inp"
+    mesh_file = joinpath(@__DIR__, "..", "test_data", "squ.inp")
     geo = Post2D(mesh_file, ["Line1", "Line2", "Line3", "Line4"])
     pos0 = [ -0.25   0.25  -0.25  0.25
              -0.25  -0.25   0.25  0.25

@@ -1,6 +1,6 @@
 @testitem "Post3D" begin
     using  HyperFSI: Post3D
-    mesh_file = "/Users/shiweihu/Codes/Develops/HyperFSI/test/test_data/vol.inp"
+    mesh_file = joinpath(@__DIR__, "..", "test_data", "vol.inp")
     geo = Post3D(mesh_file, ["Surface1", "Surface2", "Surface3", "Surface4", "Surface5", "Surface6"])
     pos0 = [ -0.25   0.25  -0.25   0.25  -0.25   0.25  -0.25  0.25
              -0.25  -0.25   0.25   0.25  -0.25  -0.25   0.25  0.25

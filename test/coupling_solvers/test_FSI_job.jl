@@ -46,7 +46,7 @@
     dtf = KitBase.timestep(ks, ctr, 0.0) * ref.time  
     fv = Flowstep(steps=1, stepsize=dtf) 
 
-    mesh_file = "/Users/shiweihu/Codes/Develops/HyperFSI/test/test_data/Ring.inp"
+    mesh_file = joinpath(@__DIR__, "..", "test_data", "Ring.inp")
     geo = Post2D(mesh_file, ["Line5","Line6","Line7","Line8"])  
     pos = geo.pos            # Node positions [m]
     area = geo.area          # Nodal areas [m²]
