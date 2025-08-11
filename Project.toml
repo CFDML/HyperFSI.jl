@@ -1,0 +1,29 @@
+name = "HyperFSI"
+uuid = "137c1f4f-298f-477f-93c8-6387cb2a9eda"
+authors = ["ShiWeiHuH <hushiwei@imech.ac.cn>, Mingshuo Han <hanmingshuo@imech.ac.cn>, Tianbai Xiao <tianbaixiao@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+Glob = "c27321d9-0574-5035-807b-f59d2c89b15c"
+KitBase = "86eed249-3a28-466f-8d3a-596821e1af9a"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
+OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
+Peridynamics = "4dc47793-80f3-4232-b30e-ca78ca9d621b"
+PointNeighbors = "1c4d5385-0a27-49de-8e2c-43b175c8985c"
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TestItemRunner = "f8b46487-2199-4994-9208-9a1283c18c0a"
+TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
+WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
+
+[compat]
+Dates = "1.11.0"
+MPI = "0.20.22"
+Peridynamics = "0.4.2"
+Reexport = "1.2.2"
+Test = "1.11.0"
+TestItemRunner = "1.1.0"

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<VTKFile type="PUnstructuredGrid" version="1.0" byte_order="LittleEndian">
+  <PUnstructuredGrid GhostLevel="0">
+    <Piece Source="timestep_1/timestep_1_1.vtu"/>
+    <PPoints>
+      <PDataArray type="Float64" Name="Points" NumberOfComponents="3"/>
+    </PPoints>
+    <FieldData>
+      <DataArray type="Float64" Name="time" NumberOfComponents="1" NumberOfTuples="1" format="ascii">
+ 1.993092447585385e-8
+</DataArray>
+    </FieldData>
+    <PPointData>
+      <PDataArray type="Float64" Name="displacement" NumberOfComponents="3"/>
+      <PDataArray type="Float64" Name="temperature" NumberOfComponents="1"/>
+      <PDataArray type="Float64" Name="damage" NumberOfComponents="1"/>
+    </PPointData>
+  </PUnstructuredGrid>
+</VTKFile>
