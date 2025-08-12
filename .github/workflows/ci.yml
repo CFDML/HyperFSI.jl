@@ -16,10 +16,42 @@ jobs:
         with:
           version: '1.11'
 
+      - name: Cache Julia artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-julia-artifacts-${{ hashFiles('**/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-artifacts-
+
+      - name: Cache Julia compiled
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/compiled
+          key: ${{ runner.os }}-julia-compiled-${{ hashFiles('**/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-compiled-
+
+      - name: Cache Conda env
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/conda
+          key: ${{ runner.os }}-julia-conda-${{ hashFiles('**/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-conda-
+
+      - name: Force PyCall to use Conda on macOS
+        if: runner.os == 'macOS'
+        run: julia -e 'ENV["PYTHON"] = ""; using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall")'
+
       - name: Install dependencies
-        run: julia --project=@. -e 'using Pkg; Pkg.instantiate()'
+        run: |
+          julia --project=@. -e 'using Pkg; Pkg.instantiate()' &
+          pid=$!
+          while kill -0 $pid 2>/dev/null; do echo "Still working..."; sleep 60; done
 
       - name: Run tests
-        run: julia --project=@. -e 'using Pkg; Pkg.test()'
-
-
+        run: |
+          julia --project=@. -e 'using Pkg; Pkg.test()' &
+          pid=$!
+          while kill -0 $pid 2>/dev/null; do echo "Still testing..."; sleep 60; done
