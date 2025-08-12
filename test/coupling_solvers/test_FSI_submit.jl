@@ -73,7 +73,7 @@
     @test job.options.export_allowed == true
     @test job.options.freq == 1
     @test job.options.root == joinpath(@__DIR__, "cylinder")
-    @test job.options.vtk == joinpath(@__DIR__, "cylinder/structure")
+    @test job.options.vtk == joinpath(@__DIR__, "cylinder", "structure")
     @test job.options.fields == [:displacement, :temperature, :damage]
-    @test job.options.flow == joinpath(@__DIR__, "cylinder/flow")
+    @test job.options.flow == joinpath(@__DIR__, "cylinder", "flow")
 end
