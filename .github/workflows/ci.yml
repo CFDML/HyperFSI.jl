@@ -45,6 +45,7 @@ jobs:
         run: julia -e 'ENV["PYTHON"] = ""; using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall")'
 
       - name: Install dependencies with retry and heartbeat
+        shell: bash
         run: |
           for i in 1 2 3; do
             julia --project=@. -e 'using Pkg; Pkg.instantiate()' &
@@ -56,6 +57,7 @@ jobs:
           done
 
       - name: Run tests with retry and heartbeat
+        shell: bash
         run: |
           for i in 1 2 3; do
             julia --project=@. -e 'using Pkg; Pkg.test()' &
