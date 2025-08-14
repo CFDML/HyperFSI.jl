@@ -27,59 +27,122 @@ function new_cal_all_point_pd_tm(dh::Peridynamics.AbstractDataHandler)
         tem = ones(3, n_points)
         defposition = copy(system.position)
 
-        for dm in 1:3
-            tem[dm, :] = 0.001.* system.position[dm, :]
-            defposition[dm, :] .*= 1.001
-            for i in eachindex(chunk.system.chunk_handler.loc_points)
-                pd_th = 0.0  
-                pd_me = 0.0 
-                for bond_id in system.bond_ids[i]
-                    bond = system.bonds[bond_id]
-                    j, L = bond.neighbor, bond.length  
+        if paramsetup isa Peridynamics.AbstractPointParameters
 
-                    failure = chunk.storage.bond_active[bond_id]
-                    mfth = 1.0
-                    mfmech = 1.0
+            for dm in 1:3
+                tem[dm, :] = 0.001.* system.position[dm, :]
+                defposition[dm, :] .*= 1.001
+                for i in eachindex(chunk.system.chunk_handler.loc_points)
+                    pd_th = 0.0  
+                    pd_me = 0.0 
+                    for bond_id in system.bond_ids[i]
+                        bond = system.bonds[bond_id]
+                        j, L = bond.neighbor, bond.length  
 
-                    for key in filter(key -> contains(string(key), "fix"), keys(chunk.psets))
-                        if i in chunk.psets[key] || j in chunk.psets[key]
-                            mfth = 0.0
+                        failure = chunk.storage.bond_active[bond_id]
+                        mfth = 1.0
+                        mfmech = 1.0
+
+                        for key in filter(key -> contains(string(key), "fix"), keys(chunk.psets))
+                            if i in chunk.psets[key] || j in chunk.psets[key]
+                                mfth = 0.0
+                            end
                         end
-                    end
-                    
-                    for key in filter(key -> contains(string(key), "tem"), keys(chunk.psets))
-                        if i in chunk.psets[key] || j in chunk.psets[key]
-                            mfmech = 0.0
+                        
+                        for key in filter(key -> contains(string(key), "tem"), keys(chunk.psets))
+                            if i in chunk.psets[key] || j in chunk.psets[key]
+                                mfmech = 0.0
+                            end
                         end
-                    end
 
-                    pd_th +=  0.25 * failure * paramsetup.kp * (tem[dm, j] - tem[dm, i])^2 / L *
-                            system.volume[j] * mfth
+                        pd_th +=  0.25 * failure * paramsetup.kp * (tem[dm, j] - tem[dm, i])^2 / L *
+                                system.volume[j] * mfth
 
-                    l = sqrt((defposition[1,j] - defposition[1,i])^2 + 
-                              (defposition[2,j] - defposition[2,i])^2 + 
-                               (defposition[3,j] - defposition[3,i])^2)
+                        l = sqrt((defposition[1,j] - defposition[1,i])^2 + 
+                                (defposition[2,j] - defposition[2,i])^2 + 
+                                (defposition[3,j] - defposition[3,i])^2)
 
-                    pd_me +=  0.25 * failure * paramsetup.bc * (l - L)^2 / L *
-                            system.volume[j] * mfmech
+                        pd_me +=  0.25 * failure * paramsetup.bc * (l - L)^2 / L *
+                                system.volume[j] * mfmech
 
-                end 
-                point_th = isapprox(pd_th, 0; atol=1e-6) ? 1.0 : 1e-6 * paramsetup.kc * 0.5 / pd_th              
-                ch_point_th_loc[chunk_id][dm, i] = point_th
+                    end 
+                    point_th = isapprox(pd_th, 0; atol=1e-6) ? 1.0 : 1e-6 * paramsetup.kc * 0.5 / pd_th              
+                    ch_point_th_loc[chunk_id][dm, i] = point_th
 
-                if pd_me != 0
-                    if abs(paramsetup.nu - 1/3) < 1e-6
-                        point_m = 9/16 * 1e-6 * paramsetup.E / pd_me
+                    if pd_me != 0
+                        if abs(paramsetup.nu - 1/3) < 1e-9
+                            point_m = 9/16 * 1e-6 * paramsetup.E / pd_me
+                        else
+                            point_m = 0.60 * 1e-6 * paramsetup.E / pd_me
+                        end
                     else
-                        point_m = 0.6 * 1e-6 * paramsetup.E / pd_me
+                        point_m = 1.0
                     end
-                else
-                    point_m = 0.0
-                end
 
-                ch_point_m_loc[chunk_id][dm, i] = point_m  
-            end
-        end
+                    ch_point_m_loc[chunk_id][dm, i] = point_m  
+                end
+            end            
+        else
+
+            for dm in 1:3
+                tem[dm, :] = 0.001.* system.position[dm, :]
+                defposition[dm, :] .*= 1.001
+                for i in eachindex(chunk.system.chunk_handler.loc_points)
+                    pd_th = 0.0  
+                    pd_me = 0.0 
+                    params_i = Peridynamics.get_params(paramsetup, i)
+                    for bond_id in system.bond_ids[i]
+                        bond = system.bonds[bond_id]
+                        j, L = bond.neighbor, bond.length  
+
+                        failure = chunk.storage.bond_active[bond_id]
+                        mfth = 1.0
+                        mfmech = 1.0
+
+                        params_j = Peridynamics.get_params(paramsetup, j)
+
+                        for key in filter(key -> contains(string(key), "fix"), keys(chunk.psets))
+                            if i in chunk.psets[key] || j in chunk.psets[key]
+                                mfth = 0.0
+                            end
+                        end
+                        
+                        for key in filter(key -> contains(string(key), "tem"), keys(chunk.psets))
+                            if i in chunk.psets[key] || j in chunk.psets[key]
+                                mfmech = 0.0
+                            end
+                        end
+
+                        pd_th +=  0.25 * failure * (params_i.kp + params_j.kp)/2 * (tem[dm, j] - tem[dm, i])^2 / L *
+                                system.volume[j] * mfth
+
+                        l = sqrt((defposition[1,j] - defposition[1,i])^2 + 
+                                (defposition[2,j] - defposition[2,i])^2 + 
+                                (defposition[3,j] - defposition[3,i])^2)
+
+                        pd_me +=  0.25 * failure * (params_i.bc + params_j.bc)/2 * (l - L)^2 / L *
+                                system.volume[j] * mfmech
+
+                    end 
+                    point_th = isapprox(pd_th, 0; atol=1e-6) ? 1.0 : 1e-6 * params_i.kc * 0.5 / pd_th              
+                    ch_point_th_loc[chunk_id][dm, i] = point_th
+
+                    if pd_me != 0
+                        if abs(params_i.nu - 1/3) < 1e-6
+                            point_m = 9/16 * 1e-6 * params_i.E / pd_me
+                        else
+                            point_m = 3/5 * 1e-6 * params_i.E / pd_me
+                        end
+                    else
+                        point_m = 0.0
+                    end
+
+                    ch_point_m_loc[chunk_id][dm, i] = point_m  
+                end
+            end 
+                        
+        end 
+
     end
 
     all_point_th = reduce(hcat, ch_point_th_loc)
@@ -160,10 +223,12 @@ function new_cal_th_factor_tm(dh::Peridynamics.AbstractDataHandler,
                 mbd_t[chunk_id][bond_id] = scrt
                 mbd_m[chunk_id][bond_id] = scrm
             end
+
         end        
     end
     return mbd_t, mbd_m
 end
+
 
 # Traditional corrections lack symmetry
 # but the impact is minor
@@ -187,17 +252,35 @@ function cal_all_point_pd_t(dh::Peridynamics.AbstractDataHandler)
         ch_point_th[chunk_id] = Vector{Float64}(undef, n_points)
 
         tem =  0.001.*[sum(system.position[:, i]) for i in 1:n_points]
-        for i in eachindex(chunk.system.chunk_handler.loc_points)
-            pd_th = 0.0   
-            for bond_id in system.bond_ids[i]
-                bond = system.bonds[bond_id]
-                j, L = bond.neighbor, bond.length  
-                pd_th +=  0.25 * paramsetup.kp * (tem[j] - tem[i])^2 / L *
-                        system.volume[j] 
-            end 
-            point_th = isapprox(paramsetup.nu, 1/3; atol=1e-5) ? 1e-6 * paramsetup.kc * 1.0 / pd_th  : 1e-6 * paramsetup.kc * 1.5 / pd_th              
-            ch_point_th_loc[chunk_id][i] = point_th
+
+        if paramsetup isa Peridynamics.AbstractPointParameters
+            for i in eachindex(chunk.system.chunk_handler.loc_points)
+                pd_th = 0.0   
+                for bond_id in system.bond_ids[i]
+                    bond = system.bonds[bond_id]
+                    j, L = bond.neighbor, bond.length  
+                    pd_th +=  0.25 * paramsetup.kp * (tem[j] - tem[i])^2 / L *
+                            system.volume[j] 
+                end 
+                point_th = isapprox(paramsetup.nu, 1/3; atol=1e-5) ? 1e-6 * paramsetup.kc * 1.0 / pd_th  : 1e-6 * paramsetup.kc * 1.5 / pd_th              
+                ch_point_th_loc[chunk_id][i] = point_th
+            end            
+        else
+            for i in eachindex(chunk.system.chunk_handler.loc_points)
+                pd_th = 0.0   
+                params_i = Peridynamics.get_params(paramsetup, i)
+                for bond_id in system.bond_ids[i]
+                    bond = system.bonds[bond_id]
+                    j, L = bond.neighbor, bond.length  
+                    params_j = Peridynamics.get_params(paramsetup, j)
+                    pd_th +=  0.25 * (params_i.kp + params_j.kp)/2 * (tem[j] - tem[i])^2 / L *
+                            system.volume[j] 
+                end 
+                point_th = isapprox(params_i.nu, 1/3; atol=1e-5) ? 1e-6 * params_i.kc * 1.0 / pd_th  : 1e-6 * params_i.kc * 1.5 / pd_th              
+                ch_point_th_loc[chunk_id][i] = point_th
+            end
         end
+
     end
 
     all_point_th = vcat(ch_point_th_loc...)
@@ -249,17 +332,34 @@ function new_cal_all_point_pd_t(dh::Peridynamics.AbstractDataHandler)
 
         for dm in 1:3
             tem[dm, :] = 0.001.* system.position[dm, :]
-            for i in eachindex(chunk.system.chunk_handler.loc_points)
-                pd_th = 0.0   
-                for bond_id in system.bond_ids[i]
-                    bond = system.bonds[bond_id]
-                    j, L = bond.neighbor, bond.length  
-                    pd_th +=  0.25 * paramsetup.kp * (tem[dm, j] - tem[dm, i])^2 / L *
-                            system.volume[j] 
-                end 
-                point_th = isapprox(pd_th, 0; atol=1e-8) ? 1.0 : 1e-6 * paramsetup.kc * 0.5 / pd_th              
-                ch_point_th_loc[chunk_id][dm, i] = point_th
-            end
+
+            if paramsetup isa Peridynamics.AbstractPointParameters
+                for i in eachindex(chunk.system.chunk_handler.loc_points)
+                    pd_th = 0.0   
+                    for bond_id in system.bond_ids[i]
+                        bond = system.bonds[bond_id]
+                        j, L = bond.neighbor, bond.length  
+                        pd_th +=  0.25 * paramsetup.kp * (tem[dm, j] - tem[dm, i])^2 / L *
+                                system.volume[j] 
+                    end 
+                    point_th = isapprox(pd_th, 0; atol=1e-8) ? 1.0 : 1e-6 * paramsetup.kc * 0.5 / pd_th             
+                    ch_point_th_loc[chunk_id][dm, i] = point_th
+                end            
+            else
+                for i in eachindex(chunk.system.chunk_handler.loc_points)
+                    pd_th = 0.0   
+                    params_i = Peridynamics.get_params(paramsetup, i)
+                    for bond_id in system.bond_ids[i]
+                        bond = system.bonds[bond_id]
+                        j, L = bond.neighbor, bond.length  
+                        params_j = Peridynamics.get_params(paramsetup, j)
+                        pd_th +=  0.25 * (params_i.kp + params_j.kp)/2 * (tem[dm, j] - tem[dm, i])^2 / L *
+                                system.volume[j] 
+                    end 
+                    point_th = isapprox(pd_th, 0; atol=1e-8) ? 1.0 : 1e-6 * params_i.kc * 0.5 / pd_th           
+                    ch_point_th_loc[chunk_id][dm, i] = point_th
+                end
+            end            
         end
     end
 

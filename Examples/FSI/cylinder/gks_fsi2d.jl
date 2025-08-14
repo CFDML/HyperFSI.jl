@@ -24,7 +24,7 @@ ref = HyperFSI.ReferenceVariables(;
     k=1.0
     )
 
-nt = 1
+nt = 1e5 # Number of time steps for coupling simulation
 n_points = 50  
 x_min, x_max = -2.0, -5.0 
 t = range(0.0, 1.0+1.0/n_points, length=n_points+2)

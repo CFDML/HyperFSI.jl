@@ -165,7 +165,7 @@ function thermomech_dualstep_pd!(dh::Peridynamics.AbstractThreadsBodyDataHandler
         end
         
         error = cal_error(dh.chunks)
-        new_calc_force_density!(dh, m_factors, t)
+        new_calc_force_density!(dh, m_factors, t, aΔt)
 
         @threads :static for chunk_id in eachindex(dh.chunks)
             chunk = dh.chunks[chunk_id]

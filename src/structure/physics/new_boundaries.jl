@@ -52,17 +52,37 @@ end
 
 function second_bcs!(chunk::Peridynamics.BodyChunk, conv::Vector{Int}, radi::Vector{Int})
     (; paramsetup, storage) = chunk
-    dx = paramsetup.δ / 4.0
-    if !isempty(conv)
-        for i in conv
-            temp = storage.temperature[1, i]
-            storage.hsource[i] = paramsetup.h * (paramsetup.tem∞ - temp) /  dx
+    if paramsetup isa Peridynamics.AbstractPointParameters
+        dx = paramsetup.δ / 4.0
+        if !isempty(conv)
+            for i in conv
+                temp = storage.temperature[1, i]
+                storage.hsource[i] = paramsetup.h * (paramsetup.tem∞ - temp) /  dx
+            end
         end
-    end
-    if !isempty(radi)
-        for i in radi
-            temp = storage.temperature[1, i]
-            storage.hsource[i] = paramsetup.hσ * paramsetup.hϵ * (paramsetup.tem∞^4 - temp^4) / dx
+        if !isempty(radi)
+            for i in radi
+                temp = storage.temperature[1, i]
+                storage.hsource[i] = paramsetup.hσ * paramsetup.hϵ * (paramsetup.tem∞^4 - temp^4) / dx
+            end
+        end
+
+    else
+        if !isempty(conv)
+            for i in conv
+                temp = storage.temperature[1, i]
+                paramsetup = Peridynamics.get_params(paramsetup, i)
+                dx = paramsetup.δ / 4.0
+                storage.hsource[i] = paramsetup.h * (paramsetup.tem∞ - temp) /  dx
+            end
+        end
+        if !isempty(radi)
+            for i in radi
+                paramsetup = Peridynamics.get_params(paramsetup, i)
+                dx = paramsetup.δ / 4.0
+                temp = storage.temperature[1, i]
+                storage.hsource[i] = paramsetup.hσ * paramsetup.hϵ * (paramsetup.tem∞^4 - temp^4) / dx
+            end
         end
     end
 end
@@ -103,10 +123,32 @@ function temperature_ic!(fun::F, b::Body, name::Symbol) where {F<:Function}
     return nothing
 end
 
-#= PD.jl need to be updated to support this
-function temperature_ic!(f::Matrix, b::Body)
-    vic = Peridynamics.VIC(f, :temperature)
-    Peridynamics.add_initial_condition!(b, b.v_ics, vic)
+#=Specified for PD_DSMC coupling!
+
+function temperature_ic!(body::Body, data::Matrix, name::Symbol, dimspec::Vector{T} = [1]) where {T<:Union{Integer,Symbol}}
+    Peridynamics.check_if_set_is_defined(body.point_sets, name)
+    Peridynamics.check_dataic_data_dimensions(body, data, dimspec)
+    dims = Peridynamics.get_dims(dimspec)
+    dataic = Peridynamics.DataIC(data, :temperature, name, dims)
+    Peridynamics.add_initial_condition!(body, body.data_ics, dataic)
+    return nothing
+end
+
+function velocity_dataic!(body::Body, data::Matrix, name::Symbol, dimspec::Vector{T} = [1, 2, 3]) where {T<:Union{Integer,Symbol}}
+    Peridynamics.check_if_set_is_defined(body.point_sets, name)
+    Peridynamics.check_dataic_data_dimensions(body, data, dimspec)
+    dims = Peridynamics.get_dims(dimspec)
+    dataic = Peridynamics.DataIC(data, :velocity_half, name, dims)
+    Peridynamics.add_initial_condition!(body, body.data_ics, dataic)
+    return nothing
+end
+
+function displacement_dataic!(body::Body, data::Matrix, name::Symbol, dimspec::Vector{T} = [1, 2, 3]) where {T<:Union{Integer,Symbol}}
+    Peridynamics.check_if_set_is_defined(body.point_sets, name)
+    Peridynamics.check_dataic_data_dimensions(body, data, dimspec)
+    dims = Peridynamics.get_dims(dimspec)
+    dataic = Peridynamics.DataIC(data, :displacement, name, dims)
+    Peridynamics.add_initial_condition!(body, body.data_ics, dataic)
     return nothing
 end
 =#
