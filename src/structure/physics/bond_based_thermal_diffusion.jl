@@ -160,11 +160,26 @@ function Peridynamics.Peridynamics.allowed_material_kwargs(::BBTMaterial)
     return (thermal_kwargs())
 end
 
-# Thermal 
+#= Thermal 
 @inline function update_temperature!(b::Peridynamics.AbstractBodyChunk, Δt::Float64)
     for point_id in Peridynamics.each_point_idx(b)
         param = Peridynamics.get_params(b, point_id)
         k = Δt / (param.rho * param.cv)
+        _update_temperature!(b.storage.temperature, b.storage.pflux, b.storage.hsource, k, point_id)
+    end
+    return nothing
+end
+=#
+
+@inline function update_temperature!(b::Peridynamics.AbstractBodyChunk, Δt::Float64)
+    for point_id in Peridynamics.each_point_idx(b)
+        param = Peridynamics.get_params(b, point_id)
+        if isdefined(param, :cv_T)
+            cv = param.cv_T(param.cv, b.storage.temperature[1, point_id])
+        else
+            cv = param.cv
+        end
+        k =  Δt / (param.rho * cv)
         _update_temperature!(b.storage.temperature, b.storage.pflux, b.storage.hsource, k, point_id)
     end
     return nothing

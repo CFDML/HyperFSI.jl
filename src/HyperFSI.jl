@@ -23,7 +23,7 @@ export Post2D, Post3D
 #export glob, write_sprata_bc_file_2d, read_bc_from_sparta, write_sparta_files, writedlm, readdlm
 
 # New Material models
-export BBTMaterial, BBTMMaterial
+export BBTMaterial, BBTMMaterial, BBTTMaterial
 
 
 # New Discretization
@@ -45,6 +45,7 @@ include("structure/time_solvers/dual_timesteps.jl")
 include("structure/physics/bond_based_thermal_diffusion.jl")
 include("structure/physics/bond_based_thermomechanics.jl")
 include("structure/physics/bond_based_dualstep_thermomechanics.jl")
+include("structure/physics/bond_based_thermal_diffusion_temp_dependent.jl")
 
 include("fluid/FlowTimesolver.jl")
 include("fluid/Evolution.jl")
