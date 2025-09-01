@@ -310,8 +310,13 @@ function mesh_to_nodes_3d(nodes::Dict{Int, Vector{Float64}}, volume_elements::Di
             v4 = tetvol(nodes_coords[4], nodes_coords[5], nodes_coords[7], nodes_coords[8])
             v5 = tetvol(nodes_coords[2], nodes_coords[4], nodes_coords[5], nodes_coords[7])
             vol[i] = v1 + v2 + v3 + v4 + v5
+        elseif n == 6
+            v1 = tetvol(nodes_coords[1], nodes_coords[2], nodes_coords[3], nodes_coords[6])
+            v2 = tetvol(nodes_coords[1], nodes_coords[2], nodes_coords[6], nodes_coords[5])
+            v3 = tetvol(nodes_coords[1], nodes_coords[5], nodes_coords[6], nodes_coords[4])
+            vol[i] = v1 + v2 + v3
         else
-            throw("Only for tetrahedral or hexahedral elements, currently")
+            throw("Only for tetrahedral, wedge or hexahedral elements, currently")
         end
 
         mesh_node_ids[element_id] = i

@@ -212,7 +212,7 @@ function pflux_point!(storage::BBTStorage, system::Peridynamics.BondSystem,
         Δtem = storage.temperature[1, j] - storage.temperature[1, i]
         
         storage.pflux[1, i] += storage.bond_active[bond_id] * (param.kp * Δtem / L) * 
-        system.volume[j] #* mof_th
+        system.volume[j] * mof_th
     end
     return nothing
 end

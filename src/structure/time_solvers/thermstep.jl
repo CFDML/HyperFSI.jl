@@ -56,6 +56,8 @@ end
 function Peridynamics.init_time_solver!(vv::Thermstep, dh::Peridynamics.AbstractDataHandler)
     if vv.Δt < 0
         vv.Δt = calc_stable_timestep_th(dh, vv.safety_factor)
+    else
+        vv.Δt = min(calc_stable_timestep_th(dh, vv.safety_factor), vv.Δt)
     end
     if vv.end_time < 0
         vv.end_time = vv.n_steps * vv.Δt
