@@ -30,7 +30,16 @@ function FSI_submit(job::FSI_job, bcst::Bcstruct, geo::Post2D, mode::String; out
             ret = submit_threads_thermomech_dual(job, bcst, geo, nthreads(); output = output, output_vars = output_vars, ref = ref)
         end
         return ret
+
+    elseif mode == "TA" # thermal ablation in structure; Uncompleted module
+        if Peridynamics.mpi_run()
+            ret = submit_mpi_therm_ablation(job)
+        else 
+            ret = submit_threads_therm_ablation(job, bcst, geo, nthreads(); output = output, output_vars = output_vars, ref = ref)
+        end
+        return ret
     end
+
 end
 
 # Submit for thermal diffusion in FSI
@@ -283,6 +292,14 @@ function FSI_submit(job::Job, mode::String; kwargs...)
             ret = DTM_submit_threads(job, nthreads())
         end
         return ret
+
+    elseif mode == "TA" # thermal ablation in structure
+        if Peridynamics.mpi_run()
+            ret = TA_submit_mpi(job)
+        else 
+            ret = TA_submit_threads(job, nthreads())
+        end
+        return ret
     end
 end
 
@@ -335,6 +352,24 @@ function DTM_submit_threads(job::Job, n_chunks::Int)
         Peridynamics.log_data_handler(job.options, dh)
         Peridynamics.log_timesolver(job.options, job.time_solver)
         solve_dual_thermomech_struct!(dh, job)
+    end
+    Peridynamics.log_simulation_duration(job.options, simulation_duration)
+    return dh
+end
+
+function TA_submit_threads(job::Job, n_chunks::Int)
+
+    simulation_duration = @elapsed begin
+        logo_init_logs(job.options)
+        Peridynamics.log_spatial_setup(job.options, job.spatial_setup)
+        Peridynamics.log_create_data_handler_start()
+        dh = Peridynamics.threads_data_handler(job.spatial_setup, job.time_solver, n_chunks)
+        Peridynamics.init_time_solver!(job.time_solver, dh)
+        Peridynamics.initialize!(dh, job.time_solver)
+        Peridynamics.log_create_data_handler_end()
+        Peridynamics.log_data_handler(job.options, dh)
+        Peridynamics.log_timesolver(job.options, job.time_solver)
+        solve_therm_struct_ablation!(dh, job)
     end
     Peridynamics.log_simulation_duration(job.options, simulation_duration)
     return dh
