@@ -46,6 +46,7 @@ include("structure/physics/bond_based_thermal_diffusion.jl")
 include("structure/physics/bond_based_thermomechanics.jl")
 include("structure/physics/bond_based_dualstep_thermomechanics.jl")
 include("structure/physics/bond_based_thermal_diffusion_temp_dependent.jl")
+#include("structure/physics/bond_based_thermal_diffusion_axis.jl")
 
 include("fluid/FlowTimesolver.jl")
 include("fluid/Evolution.jl")
