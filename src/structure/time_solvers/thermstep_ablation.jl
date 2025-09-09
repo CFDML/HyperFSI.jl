@@ -101,13 +101,12 @@ function Thermstep_check(vv::Thermstep_ablation)
     return nothing
 end
 
-function solve_therm_struct_ablation!(dh::Peridynamics.AbstractDataHandler, job::Job)
+function solve_therm_struct_ablation!(dh::Peridynamics.AbstractDataHandler, job::Job, geo::AbstractPDGeometry)
     options = job.options
     Δt = job.time_solver.Δt
     ablation_update_freq = job.time_solver.ablation_update_freq
 
-    conv, radi = find_sec_bcs_points(dh)
-    position = reduce(hcat, [chunk.storage.position[:, 1:chunk.system.chunk_handler.n_loc_points] for chunk in dh.chunks])        
+    conv, radi = find_sec_bcs_points(dh)       
     
     if mpi_isroot()
         pro = Progress(job.time_solver.n_steps; dt=1, desc="solve...", color=:normal, barlen=20,
@@ -115,7 +114,7 @@ function solve_therm_struct_ablation!(dh::Peridynamics.AbstractDataHandler, job:
     end
 
     for n in 1:job.time_solver.n_steps
-        thermstep_ablation_pd!(dh, options, Δt, n, conv, radi, ablation_update_freq, position)
+        thermstep_ablation_pd!(dh, options, Δt, n, conv, radi, ablation_update_freq, geo)
         mpi_isroot() && next!(pro)     
     end
     mpi_isroot() && finish!(pro)
@@ -123,7 +122,7 @@ function solve_therm_struct_ablation!(dh::Peridynamics.AbstractDataHandler, job:
 end
 
 function thermstep_ablation_pd!(dh::Peridynamics.AbstractThreadsBodyDataHandler, options::Peridynamics.AbstractJobOptions,
-                          Δt::Float64, n::Int, conv::Vector{Vector{Int}}, radi::Vector{Vector{Int}}, n_ablation::Int, pos::Matrix{Float64})
+                          Δt::Float64, n::Int, conv::Vector{Vector{Int}}, radi::Vector{Vector{Int}}, n_ablation::Int, geo::AbstractPDGeometry)
     t = n * Δt
     new_ab_idx_all = [Int[] for _ in 1:dh.n_chunks]
     old_ab_idx_all = [Int[] for _ in 1:dh.n_chunks]
@@ -142,19 +141,25 @@ function thermstep_ablation_pd!(dh::Peridynamics.AbstractThreadsBodyDataHandler,
         Peridynamics.exchange_halo_to_loc!(dh, chunk_id)
         chunk = dh.chunks[chunk_id]        
         update_temperature!(chunk, Δt)
-        Peridynamics.apply_boundary_conditions!(chunk, t)
-        if mod(n, n_ablation) == 0
-            new_ab_idx_all[chunk_id], old_ab_idx_all[chunk_id] = update_ablation_exist!(chunk, Δt)
-        end
+        new_ab_idx_all[chunk_id], old_ab_idx_all[chunk_id] = update_ablation_exist!(chunk, Δt)
     end
+    
+    index_new_ablation = collect(unique(Iterators.flatten(new_ab_idx_all)))
+    if !isempty(index_new_ablation) && (mod(n, n_ablation) == 0)   
+        index_old_ablation = collect(unique(Iterators.flatten(old_ab_idx_all)))
+        new_bcs_idx, idx_map = find_new_bcs_idx(dh, index_new_ablation, index_old_ablation, geo.pos)
 
-    new_bcs_idx, idx_map = find_new_bcs_idx(dh, new_ab_idx_all, old_ab_idx_all, pos)
+        @threads :static for chunk_id in eachindex(dh.chunks)
+            #update_new_bcs!(dh.chunks[chunk_id], idx_map, new_ab_idx_all[chunk_id])
+            update_new_bcs!(dh.chunks[chunk_id], new_bcs_idx)
+        end
+        update_new_edges!(geo, index_new_ablation)
+        save_bc_edges_vtk(geo, options.root, n, Δt)
+    end  
 
     @threads :static for chunk_id in eachindex(dh.chunks)
-        #update_new_bcs!(dh.chunks[chunk_id], idx_map, new_ab_idx_all[chunk_id])
-        update_new_bcs!(dh.chunks[chunk_id], new_bcs_idx)
         Peridynamics.export_results(dh, options, chunk_id, n, t)
-    end
+    end    
 
     return nothing
 end

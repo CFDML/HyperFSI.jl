@@ -15,6 +15,7 @@ using WriteVTK
 using Dates
 
 abstract type AbstractFlowTimeSolver end
+abstract type AbstractPDGeometry end
 
 # Pre processing
 export Post2D, Post3D
@@ -33,9 +34,11 @@ export hsource_bc!, hsource_databc!, temperature_ic!, temperature_bc!, temperatu
 export Thermstep, Thermomechstep, Dualstep, Thermstep_ablation, Flowstep, FSI_job, FSI_submit, IBM2D, Bcstruct
 
 
+include("IBM/boundary_counter.jl")
 include("IBM/post_2d.jl")
 include("IBM/post_3d.jl")
 include("IBM/ibm.jl")
+include("IBM/find_new_bc_edges.jl")
 
 include("structure/physics/modify.jl")
 include("structure/physics/new_boundaries.jl")

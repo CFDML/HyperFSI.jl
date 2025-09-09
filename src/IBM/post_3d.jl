@@ -1,9 +1,19 @@
-struct Post3D
+"""
+Post-processing of mesh files
+Pre-processing of PD programs
+Processing of standard 3D linear mesh files
+"""
+mutable struct Post3D <: AbstractPDGeometry
     bc_nodes::Vector{Int}
     pos::Matrix{Float64}
     vol::Vector{Float64}
     in_bc_nodes::Vector{Int}
     bc_surface::Dict{Int, Vector{Vector{Vector{Float64}}}}
+    mesh_nodes::Dict{Int, Vector{Float64}}
+    pd_id_to_volume::Dict{Int, Int}    
+    volume_elements::Dict{Int, Vector{Int}}  # Added to store surface elements
+    element_type::Dict{Int, String}
+    bc_counter::BoundaryCounter
     
     function Post3D(filepath::String, outside_elsets::Vector{String}, inside_elsets::Vector{String}=String[])
         # Input validation
@@ -17,10 +27,10 @@ struct Post3D
         
         # Process mesh data
         if isempty(inside_elsets)
-            nodes, out_boundary_elements, volume_elements = get_3d_boundary_elements(full_filepath, outside_elsets)
+            nodes, out_boundary_elements, volume_elements, element_type = get_3d_boundary_elements(full_filepath, outside_elsets)
             in_boundary_elements = Dict{Int, Vector{Int}}()
         else
-            nodes, out_boundary_elements, in_boundary_elements, volume_elements = 
+            nodes, out_boundary_elements, in_boundary_elements, volume_elements, element_type = 
                 get_3d_boundary_elements(full_filepath, outside_elsets, inside_elsets)
         end
         
@@ -50,12 +60,22 @@ struct Post3D
                 pd_id = mesh_node_ids[element_id]
                 push!(in_bc_nodes, pd_id)
             end
-        end        
-        
+        end       
+
+        pd_id_to_volume = Dict(pd_id => element_id for (element_id, pd_id) in mesh_node_ids)  
+
         # Convert vol to vector for consistency
         vol_vec = vec(vol)
+
+        bc_counter = BoundaryCounter()
         
-        new(bc_nodes, pos, vol_vec, in_bc_nodes, bc_surface)
+        for (mesh_id, elem) in volume_elements
+            pd_id = mesh_node_ids[mesh_id]
+            cell_type = element_type[mesh_id]
+            add_element!(bc_counter, elem, cell_type, pd_id)
+        end
+        
+        new(bc_nodes, pos, vol_vec, in_bc_nodes, bc_surface, nodes, pd_id_to_volume, volume_elements, element_type, bc_counter)
     end
 end
 
@@ -63,7 +83,7 @@ end
 function Base.show(io::IO, geo::Post3D)
     println(io, "Post3D Structure:")
     println(io, "  - Number of PD nodes: ", size(geo.pos, 2))
-    println(io, "  - Number of GC nodes: ", length(geo.bc_nodes))
+    println(io, "  - Number of BC nodes: ", length(geo.bc_nodes))
     println(io, "  - Number of inner BC nodes: ", length(geo.in_bc_nodes))
     println(io, "  - Position matrix size: ", size(geo.pos))
     println(io, "  - Volume vector length: ", length(geo.vol))
@@ -72,7 +92,7 @@ end
 # return node Dict, index and position 
 #boundary_elements Dict, index and node index
 #volume_elements Dict, index and node index
-
+#=
 function get_3d_boundary_elements(filepath::String, out_target_elsets::Vector{String}, in_target_elsets::Vector{String})
     out_boundary_elements = Dict{Int, Vector{Int}}()  # Out_boundary surface elements
     in_boundary_elements = Dict{Int, Vector{Int}}()  # In_boundary surface elements    
@@ -144,7 +164,171 @@ function get_3d_boundary_elements(filepath::String, out_target_elsets::Vector{St
 
     return nodes, out_boundary_elements, in_boundary_elements, volume_elements
 end
+=#
 
+function get_3d_boundary_elements(filepath::String, out_target_elsets::Vector{String})
+    out_boundary_elements = Dict{Int, Vector{Int}}()  # Out_boundary surface elements
+    volume_elements = Dict{Int, Vector{Int}}()        # Volume elements
+    element_type = Dict{Int, String}()               # Element type
+    nodes = Dict{Int, Vector{Float64}}()             # Nodes
+
+    current_section = ""
+    current_elset = ""
+    current_element_type = ""
+
+    println("Reading file: $filepath")
+    if !isfile(filepath)
+        error("File does not exist: $filepath")
+    end
+
+    println("Parsing file...")
+    for line in eachline(filepath)
+        line = strip(line)
+        if isempty(line) || startswith(line, "**")
+            continue
+        end
+
+        # Section headers
+        if startswith(line, "*NODE")
+            current_section = "Node"
+            continue
+        elseif startswith(line, "*ELEMENT")
+            current_section = "Element"
+
+            # Element type
+            m_type = match(r"TYPE=([\w\d]+)"i, line)
+            current_element_type = m_type !== nothing ? m_type.captures[1] : ""
+
+            # ELSET
+            m_set = match(r"ELSET=([\w\d]+)"i, line)
+            current_elset = m_set !== nothing ? m_set.captures[1] : ""
+            continue
+        elseif startswith(line, "*")
+            current_section = ""
+            current_elset = ""
+            current_element_type = ""
+            continue
+        end
+
+        # Parse nodes
+        if current_section == "Node"
+            parts = split(line, ",")
+            try
+                node_id = parse(Int, strip(parts[1]))
+                coord = [parse(Float64, strip(x)) for x in parts[2:end]]
+                nodes[node_id] = coord
+            catch
+                @warn "Invalid node line: $line"
+            end
+
+        # Parse elements
+        elseif current_section == "Element"
+            parts = split(line, ",")
+            try
+                elem_id = parse(Int, strip(parts[1]))
+                elem_nodes = [parse(Int, strip(x)) for x in parts[2:end]]
+
+                if current_elset in out_target_elsets
+                    out_boundary_elements[elem_id] = elem_nodes
+                    element_type[elem_id] = current_element_type
+                elseif occursin("Volume", current_elset)
+                    volume_elements[elem_id] = elem_nodes
+                    element_type[elem_id] = current_element_type
+                end
+            catch
+                @warn "Invalid element line: $line"
+            end
+        end
+    end
+
+    return nodes, out_boundary_elements, volume_elements, element_type
+end
+
+function get_3d_boundary_elements(filepath::String, out_target_elsets::Vector{String}, in_target_elsets::Vector{String})
+    
+    out_boundary_elements = Dict{Int, Vector{Int}}()   # Out_boundary surface elements
+    in_boundary_elements  = Dict{Int, Vector{Int}}()   # In_boundary surface elements
+    volume_elements       = Dict{Int, Vector{Int}}()   # Volume elements
+    nodes                 = Dict{Int, Vector{Float64}}()
+    element_type          = Dict{Int, String}()        # element_id → type
+
+    current_section = ""
+    current_elset = ""
+    current_element_type = ""
+
+    println("Reading file: $filepath")
+    if !isfile(filepath)
+        error("File does not exist: $filepath")
+    end
+
+    println("Parsing file...")
+    for line in eachline(filepath)
+        line = strip(line)
+
+        # Parse node section
+        if startswith(line, "*NODE")
+            current_section = "Node"
+            continue
+
+        # Parse element section
+        elseif startswith(line, "*ELEMENT")
+            current_section = "Element"
+
+            # element type
+            m_type = match(r"TYPE=([\w\d]+)"i, line)
+            current_element_type = m_type !== nothing ? m_type.captures[1] : ""
+
+            # elset
+            m_set = match(r"ELSET=([\w\d]+)"i, line)
+            current_elset = m_set !== nothing ? m_set.captures[1] : ""
+            continue
+
+        # Reset for other keyword lines
+        elseif startswith(line, "*")
+            current_section = ""
+            current_elset = ""
+            current_element_type = ""
+            continue
+        end
+
+        # Parse nodes
+        if current_section == "Node"
+            parts = split(line, ",")
+            try
+                node_id = parse(Int, strip(parts[1]))
+                coord = [parse(Float64, strip(x)) for x in parts[2:end]]
+                nodes[node_id] = coord
+            catch
+                @warn "Invalid node line: $line"
+            end
+
+        # Parse elements
+        elseif current_section == "Element"
+            parts = split(line, ",")
+            try
+                elem_id = parse(Int, strip(parts[1]))
+                elem_nodes = [parse(Int, strip(x)) for x in parts[2:end]]
+
+                if current_elset in out_target_elsets
+                    out_boundary_elements[elem_id] = elem_nodes
+                    element_type[elem_id] = current_element_type
+                elseif current_elset in in_target_elsets
+                    in_boundary_elements[elem_id] = elem_nodes
+                    element_type[elem_id] = current_element_type
+                elseif occursin("Volume", current_elset)
+                    volume_elements[elem_id] = elem_nodes
+                    element_type[elem_id] = current_element_type
+                end
+            catch
+                @warn "Invalid element line: $line"
+            end
+        end
+    end
+
+    return nodes, out_boundary_elements, in_boundary_elements, volume_elements, element_type
+end
+
+#=
 function get_3d_boundary_elements(filepath::String, out_target_elsets::Vector{String})
     out_boundary_elements = Dict{Int, Vector{Int}}()  # Out_boundary surface elements
     volume_elements = Dict{Int, Vector{Int}}()   # Voleme elements
@@ -213,6 +397,7 @@ function get_3d_boundary_elements(filepath::String, out_target_elsets::Vector{St
 
     return nodes, out_boundary_elements, volume_elements
 end
+=#
 
 function build_node_to_volume_map(volume_elements::Dict{Int, Vector{Int}})
     node_to_volume = Dict{Int, Vector{Int}}()

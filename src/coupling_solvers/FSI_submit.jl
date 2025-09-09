@@ -1,7 +1,7 @@
 const SUBMIT_KWARGS = (:quiet,)
 
 # Submit for FSI simulation
-function FSI_submit(job::FSI_job, bcst::Bcstruct, geo::Post2D, mode::String; output=nothing, output_vars = nothing, ref = nothing, kwargs...)
+function FSI_submit(job::FSI_job, bcst::Bcstruct, geo::AbstractPDGeometry, mode::String; output=nothing, output_vars = nothing, ref = nothing, kwargs...)
     o = Dict{Symbol,Any}(kwargs)
     Peridynamics.check_kwargs(o, SUBMIT_KWARGS)
     quiet = Peridynamics.get_submit_options(o)
@@ -43,7 +43,7 @@ function FSI_submit(job::FSI_job, bcst::Bcstruct, geo::Post2D, mode::String; out
 end
 
 # Submit for thermal diffusion in FSI
-function submit_threads_therm(job::FSI_job, hsource_bc::Matrix{Float64}, geo::Post2D, n_chunks::Int; output = nothing, output_vars = nothing, ref = nothing)
+function submit_threads_therm(job::FSI_job, hsource_bc::Matrix{Float64}, geo::AbstractPDGeometry, n_chunks::Int; output = nothing, output_vars = nothing, ref = nothing)
 
     simulation_duration = @elapsed begin
         logo_init_logs(job.options)
@@ -63,7 +63,7 @@ function submit_threads_therm(job::FSI_job, hsource_bc::Matrix{Float64}, geo::Po
     return dh
 end
 
-function submit_mpi_therm(job::FSI_job, hsource_bc::Matrix{Float64}, geo::Post2D; output = nothing, output_vars = nothing, ref = nothing)
+function submit_mpi_therm(job::FSI_job, hsource_bc::Matrix{Float64}, geo::AbstractPDGeometry; output = nothing, output_vars = nothing, ref = nothing)
 
     timeit_debug_enabled() && reset_timer!(TO)
     simulation_duration = @elapsed begin
@@ -92,7 +92,7 @@ function submit_mpi_therm(job::FSI_job, hsource_bc::Matrix{Float64}, geo::Post2D
     end
 end
 
-function solve_therm!(dh::Peridynamics.AbstractDataHandler, job::FSI_job, geo::Post2D, options::Peridynamics.AbstractJobOptions, hsource_bc::Matrix{Float64}; output = nothing, output_vars = nothing, ref = nothing)
+function solve_therm!(dh::Peridynamics.AbstractDataHandler, job::FSI_job, geo::AbstractPDGeometry, options::Peridynamics.AbstractJobOptions, hsource_bc::Matrix{Float64}; output = nothing, output_vars = nothing, ref = nothing)
     ks = job.flow_setup
     Δt = min(job.s_time_solver.Δt, job.f_time_solver.Δt)
     sys_n = job.s_time_solver.n_steps
@@ -132,7 +132,7 @@ function solve_therm!(dh::Peridynamics.AbstractDataHandler, job::FSI_job, geo::P
 end
 
 # Submit for thermomechanics in FSI 
-function submit_threads_thermomech(job::FSI_job, bcst::Bcstruct, geo::Post2D, n_chunks::Int; output = nothing, output_vars = nothing, ref = nothing)
+function submit_threads_thermomech(job::FSI_job, bcst::Bcstruct, geo::AbstractPDGeometry, n_chunks::Int; output = nothing, output_vars = nothing, ref = nothing)
 
     simulation_duration = @elapsed begin
         logo_init_logs(job.options)
@@ -152,7 +152,7 @@ function submit_threads_thermomech(job::FSI_job, bcst::Bcstruct, geo::Post2D, n_
     return dh
 end
 
-function solve_thermomech!(dh::Peridynamics.AbstractDataHandler, job::FSI_job, geo::Post2D, bcst::Bcstruct; output = nothing, output_vars = nothing, ref = nothing)
+function solve_thermomech!(dh::Peridynamics.AbstractDataHandler, job::FSI_job, geo::AbstractPDGeometry, bcst::Bcstruct; output = nothing, output_vars = nothing, ref = nothing)
     ks = job.flow_setup
     options = job.options
     Δt = min(job.s_time_solver.Δt, job.f_time_solver.Δt)
@@ -198,7 +198,7 @@ function solve_thermomech!(dh::Peridynamics.AbstractDataHandler, job::FSI_job, g
 end
 
 # Submit for thermomechanics——dualsteps in FSI 
-function submit_threads_thermomech_dual(job::FSI_job, bcst::Bcstruct, geo::Post2D, n_chunks::Int; output = nothing, output_vars = nothing, ref = nothing)
+function submit_threads_thermomech_dual(job::FSI_job, bcst::Bcstruct, geo::AbstractPDGeometry, n_chunks::Int; output = nothing, output_vars = nothing, ref = nothing)
 
     simulation_duration = @elapsed begin
         logo_init_logs(job.options)
@@ -218,7 +218,7 @@ function submit_threads_thermomech_dual(job::FSI_job, bcst::Bcstruct, geo::Post2
     return dh
 end
 
-function solve_thermomech_dual!(dh::Peridynamics.AbstractDataHandler, job::FSI_job, geo::Post2D, bcst::Bcstruct; output = nothing, output_vars = nothing, ref = nothing)
+function solve_thermomech_dual!(dh::Peridynamics.AbstractDataHandler, job::FSI_job, geo::AbstractPDGeometry, bcst::Bcstruct; output = nothing, output_vars = nothing, ref = nothing)
     ks = job.flow_setup
     options = job.options
     Δt = min(job.s_time_solver.Δt, job.f_time_solver.Δt)
@@ -263,7 +263,7 @@ function solve_thermomech_dual!(dh::Peridynamics.AbstractDataHandler, job::FSI_j
 end
 
 # Submit for PD simulation
-function FSI_submit(job::Job, mode::String; kwargs...)
+function FSI_submit(job::Job, mode::String, geo::AbstractPDGeometry ; kwargs...)
     o = Dict{Symbol,Any}(kwargs)
     Peridynamics.check_kwargs(o, SUBMIT_KWARGS)
     quiet = Peridynamics.get_submit_options(o)
@@ -297,7 +297,7 @@ function FSI_submit(job::Job, mode::String; kwargs...)
         if Peridynamics.mpi_run()
             ret = TA_submit_mpi(job)
         else 
-            ret = TA_submit_threads(job, nthreads())
+            ret = TA_submit_threads(job, nthreads(), geo)
         end
         return ret
     end
@@ -357,7 +357,7 @@ function DTM_submit_threads(job::Job, n_chunks::Int)
     return dh
 end
 
-function TA_submit_threads(job::Job, n_chunks::Int)
+function TA_submit_threads(job::Job, n_chunks::Int, geo::AbstractPDGeometry)
 
     simulation_duration = @elapsed begin
         logo_init_logs(job.options)
@@ -369,7 +369,7 @@ function TA_submit_threads(job::Job, n_chunks::Int)
         Peridynamics.log_create_data_handler_end()
         Peridynamics.log_data_handler(job.options, dh)
         Peridynamics.log_timesolver(job.options, job.time_solver)
-        solve_therm_struct_ablation!(dh, job)
+        solve_therm_struct_ablation!(dh, job, geo)
     end
     Peridynamics.log_simulation_duration(job.options, simulation_duration)
     return dh

@@ -1,9 +1,20 @@
-struct Post2D
+"""
+Post-processing of mesh files
+Pre-processing of PD programs
+Handle with 2D linear meshes
+Processing of standard 3D linear mesh files
+"""
+mutable struct Post2D <: AbstractPDGeometry
     bc_nodes::Vector{Int}
     pos::Matrix{Float64}
     area::Vector{Float64}
     in_bc_nodes::Vector{Int}
     bc_edge::Dict{Int, Vector{Vector{Vector{Float64}}}}
+    mesh_nodes::Dict{Int, Vector{Float64}}
+    pd_id_to_surface::Dict{Int, Int}    
+    surface_elements::Dict{Int, Vector{Int}}  # Added to store surface elements
+    element_type::Dict{Int, String}
+    bc_counter::BoundaryCounter
     
     function Post2D(filepath::String, outside_elsets::Vector{String}, inside_elsets::Vector{String}=String[])
         # Input validation
@@ -17,10 +28,10 @@ struct Post2D
         
         # Process mesh data
         if isempty(inside_elsets)
-            nodes, out_boundary_elements, surface_elements = get_2d_boundary_elements(full_filepath, outside_elsets)
+            nodes, out_boundary_elements, surface_elements, element_type = get_2d_boundary_elements(full_filepath, outside_elsets)
             in_boundary_elements = Dict{Int, Vector{Int}}()
         else
-            nodes, out_boundary_elements, in_boundary_elements, surface_elements = 
+            nodes, out_boundary_elements, in_boundary_elements, surface_elements, element_type = 
                 get_2d_boundary_elements(full_filepath, outside_elsets, inside_elsets)
         end
         
@@ -50,12 +61,21 @@ struct Post2D
                 pd_id = mesh_node_ids[element_id]
                 push!(in_bc_nodes, pd_id)
             end
-        end        
+        end
+        pd_id_to_surface = Dict(pd_id => element_id for (element_id, pd_id) in mesh_node_ids)      
         
         # Convert area to vector for consistency
         area_vec = vec(area)
         
-        new(bc_nodes, pos, area_vec, in_bc_nodes, bc_edge)
+        bc_counter = BoundaryCounter()
+        
+        for (mesh_id, elem) in surface_elements
+            pd_id = mesh_node_ids[mesh_id]
+            cell_type = element_type[mesh_id]
+            add_element!(bc_counter, elem, cell_type, pd_id)
+        end
+        
+        new(bc_nodes, pos, area_vec, in_bc_nodes, bc_edge, nodes, pd_id_to_surface, surface_elements, element_type, bc_counter)
     end
 end
 
@@ -63,7 +83,7 @@ end
 function Base.show(io::IO, geo::Post2D)
     println(io, "Post2D Structure:")
     println(io, "  - Number of PD nodes: ", size(geo.pos, 2))
-    println(io, "  - Number of GC nodes: ", length(geo.bc_nodes))
+    println(io, "  - Number of BC nodes: ", length(geo.bc_nodes))
     println(io, "  - Number of inner BC nodes: ", length(geo.in_bc_nodes))
     println(io, "  - Position matrix size: ", size(geo.pos))
     println(io, "  - Area vector length: ", length(geo.area))
@@ -73,145 +93,164 @@ end
 #boundary_elements Dict, index and node index
 #surface_elements Dict, index and node index
 
+
 function get_2d_boundary_elements(filepath::String, out_target_elsets::Vector{String})
-    out_boundary_elements = Dict{Int, Vector{Int}}()  # Boundary line elements
-    surface_elements = Dict{Int, Vector{Int}}()   # Surface elements
-    nodes = Dict{Int, Vector{Float64}}()           # Nodes
+    out_boundary_elements = Dict{Int, Vector{Int}}()
+    surface_elements = Dict{Int, Vector{Int}}()
+    element_type = Dict{Int, String}()
+    nodes = Dict{Int, Vector{Float64}}()
 
-    current_set = ""
+    current_section = ""
     current_elset = ""
+    current_element_type = ""
 
-    println("Reading file: $filepath")
     if !isfile(filepath)
-        println("File does not exist!")
-        return
+        error("File does not exist: $filepath")
     end
 
-    println("Parsing file...")
     for line in eachline(filepath)
-        line = strip(line)  # Remove whitespace
+        line = strip(line)
+        if isempty(line) || startswith(line, "**")
+            continue
+        end
 
-        # Parse node section
-        if occursin("*NODE", line)
-            current_set = "Node"
+        # Section headers
+        if startswith(line, "*NODE")
+            current_section = "Node"
             continue
-        # Parse element section
-        elseif occursin("*ELEMENT", line)
-            match_result = match(r"\*ELEMENT.*ELSET=(\w+)", line)
-            if match_result !== nothing
-                current_elset = match_result.captures[1]
-                current_set = current_elset
-            end
+        elseif startswith(line, "*ELEMENT")
+            current_section = "Element"
+            # Element type
+            m_type = match(r"TYPE=([\w\d]+)"i, line)
+            current_element_type = m_type !== nothing ? m_type.captures[1] : ""
+            # ELSET
+            m_set = match(r"ELSET=([\w\d]+)"i, line)
+            current_elset = m_set !== nothing ? m_set.captures[1] : ""
             continue
-        # Reset current section for other lines starting with '*'
         elseif startswith(line, "*")
-            current_set = ""
+            current_section = ""
+            current_elset = ""
+            current_element_type = ""
             continue
         end
 
         # Parse nodes
-        if current_set == "Node"
-            parts = split(line, ",")  # Split by comma
-            if length(parts) >= 4  # Check if node format is correct
-                node_id = parse(Int, strip(parts[1]))  # Node ID
-                coord = [parse(Float64, strip(parts[i])) for i in 2:4]  # Coordinates
+        if current_section == "Node"
+            parts = split(line, ",")
+            try
+                node_id = parse(Int, strip(parts[1]))
+                coord = [parse(Float64, strip(x)) for x in parts[2:end]]
                 nodes[node_id] = coord
-            else
-                println("Warning: Incorrect node format -> $line")
+            catch
+                @warn "Invalid node line: $line"
             end
-        # Parse boundary line or surface elements
-        elseif current_set in out_target_elsets || occursin("Surface", current_set)
-            parts = split(line, ",")  # Split by comma
-            if length(parts) >= 2  # At least element ID and node IDs
-                element_id = parse(Int, strip(parts[1]))  # Element ID
-                element_nodes = [parse(Int, strip(parts[i])) for i in 2:length(parts)]  # Element nodes
 
-                # Add to boundary elements if in target sets
-                if current_set in out_target_elsets
-                    out_boundary_elements[element_id] = element_nodes
-                # Add to surface elements if applicable
-                elseif occursin("Surface", current_set)
-                    surface_elements[element_id] = element_nodes
+        # Parse elements
+        elseif current_section == "Element"
+            parts = split(line, ",")
+            try
+                elem_id = parse(Int, strip(parts[1]))
+                elem_nodes = [parse(Int, strip(x)) for x in parts[2:end]]
+
+                # Boundary elements
+                if current_elset in out_target_elsets
+                    out_boundary_elements[elem_id] = elem_nodes
+
+                # Only surface elements
+                elseif occursin("Surface", current_elset)
+                    surface_elements[elem_id] = elem_nodes
+                    element_type[elem_id] = current_element_type
                 end
-            else
-                println("Warning: Incorrect element format -> $line")
+            catch
+                @warn "Invalid element line: $line"
             end
         end
     end
 
-    return nodes, out_boundary_elements, surface_elements
+    return nodes, out_boundary_elements, surface_elements, element_type
 end
 
 function get_2d_boundary_elements(filepath::String, out_target_elsets::Vector{String}, in_target_elsets::Vector{String})
-    out_boundary_elements = Dict{Int, Vector{Int}}()  # Out_Boundary line elements
-    in_boundary_elements = Dict{Int, Vector{Int}}()  # Inner_Boundary line elements
-    surface_elements = Dict{Int, Vector{Int}}()   # Surface elements
-    nodes = Dict{Int, Vector{Float64}}()           # Nodes
+    out_boundary_elements = Dict{Int, Vector{Int}}()
+    in_boundary_elements = Dict{Int, Vector{Int}}()
+    surface_elements = Dict{Int, Vector{Int}}()
+    element_type = Dict{Int, String}()
+    nodes = Dict{Int, Vector{Float64}}()
 
-    current_set = ""
+    current_section = ""
     current_elset = ""
+    current_element_type = ""
 
-    println("Reading file: $filepath")
     if !isfile(filepath)
-        println("File does not exist!")
-        return
+        error("File does not exist: $filepath")
     end
 
-    println("Parsing file...")
     for line in eachline(filepath)
-        line = strip(line)  # Remove whitespace
+        line = strip(line)
+        if isempty(line) || startswith(line, "**")
+            continue
+        end
 
-        # Parse node section
-        if occursin("*NODE", line)
-            current_set = "Node"
+        # Section headers
+        if startswith(line, "*NODE")
+            current_section = "Node"
             continue
-        # Parse element section
-        elseif occursin("*ELEMENT", line)
-            match_result = match(r"\*ELEMENT.*ELSET=(\w+)", line)
-            if match_result !== nothing
-                current_elset = match_result.captures[1]
-                current_set = current_elset
-            end
+        elseif startswith(line, "*ELEMENT")
+            current_section = "Element"
+            # Element type
+            m_type = match(r"TYPE=([\w\d]+)"i, line)
+            current_element_type = m_type !== nothing ? m_type.captures[1] : ""
+            # ELSET
+            m_set = match(r"ELSET=([\w\d]+)"i, line)
+            current_elset = m_set !== nothing ? m_set.captures[1] : ""
             continue
-        # Reset current section for other lines starting with '*'
         elseif startswith(line, "*")
-            current_set = ""
+            current_section = ""
+            current_elset = ""
+            current_element_type = ""
             continue
         end
 
         # Parse nodes
-        if current_set == "Node"
-            parts = split(line, ",")  # Split by comma
-            if length(parts) >= 4  # Check if node format is correct
-                node_id = parse(Int, strip(parts[1]))  # Node ID
-                coord = [parse(Float64, strip(parts[i])) for i in 2:4]  # Coordinates
+        if current_section == "Node"
+            parts = split(line, ",")
+            try
+                node_id = parse(Int, strip(parts[1]))
+                coord = [parse(Float64, strip(x)) for x in parts[2:end]]
                 nodes[node_id] = coord
-            else
-                println("Warning: Incorrect node format -> $line")
+            catch
+                @warn "Invalid node line: $line"
             end
-        # Parse boundary line or surface elements
-        elseif current_set in out_target_elsets || current_set in in_target_elsets || occursin("Surface", current_set)
-            parts = split(line, ",")  # Split by comma
-            if length(parts) >= 2  # At least element ID and node IDs
-                element_id = parse(Int, strip(parts[1]))  # Element ID
-                element_nodes = [parse(Int, strip(parts[i])) for i in 2:length(parts)]  # Element nodes
 
-                # Add to boundary elements if in target sets
-                if current_set in out_target_elsets
-                    out_boundary_elements[element_id] = element_nodes
-                elseif current_set in in_target_elsets
-                    in_boundary_elements[element_id] = element_nodes
-                # Add to surface elements if applicable
-                elseif occursin("Surface", current_set)
-                    surface_elements[element_id] = element_nodes
+        # Parse elements
+        elseif current_section == "Element"
+            parts = split(line, ",")
+            if length(parts) < 2
+                @warn "Invalid element line: $line"
+                continue
+            end
+            try
+                elem_id = parse(Int, strip(parts[1]))
+                elem_nodes = [parse(Int, strip(x)) for x in parts[2:end]]
+
+                # Out boundary
+                if current_elset in out_target_elsets
+                    out_boundary_elements[elem_id] = elem_nodes
+                # In boundary
+                elseif current_elset in in_target_elsets
+                    in_boundary_elements[elem_id] = elem_nodes
+                # Surface elements
+                elseif occursin("Surface", current_elset)
+                    surface_elements[elem_id] = elem_nodes
+                    element_type[elem_id] = current_element_type
                 end
-            else
-                println("Warning: Incorrect element format -> $line")
+            catch
+                @warn "Failed parsing element line: $line"
             end
         end
     end
 
-    return nodes, out_boundary_elements, in_boundary_elements, surface_elements
+    return nodes, out_boundary_elements, in_boundary_elements, surface_elements, element_type
 end
 
 function build_node_to_surface_map(surface_elements::Dict{Int, Vector{Int}})

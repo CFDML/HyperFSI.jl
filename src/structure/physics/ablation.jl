@@ -1,7 +1,7 @@
 ### ablation function
 function update_ablation_exist!(chunk::Peridynamics.AbstractBodyChunk, Δt::Float64)
     new_ablation_point_idx = Vector{Int}()
-    old_ablation_point_idx = Vector{Int}()
+    old_ablation_point_idx = Vector{Int}() ## all ablation points, including new ones
     for i in eachindex(chunk.system.chunk_handler.loc_points)
         if chunk.storage.exist[1, i] == 1
             Δv = cal_ablation_rate(chunk, i)
@@ -11,6 +11,7 @@ function update_ablation_exist!(chunk::Peridynamics.AbstractBodyChunk, Δt::Floa
                 chunk.storage.exist[1, i] = 0
                 id_ch = chunk.system.chunk_handler.loc_points[i] # global index
                 push!(new_ablation_point_idx, id_ch)
+                push!(old_ablation_point_idx, id_ch)
             end
         else
             id_ch = chunk.system.chunk_handler.loc_points[i] # global index
@@ -61,18 +62,15 @@ function update_ab_bcs_add!(chunk::Peridynamics.AbstractBodyChunk, new_ablation_
 end
 =#
 
-function find_new_bcs_idx(dh::Peridynamics.AbstractThreadsBodyDataHandler, new_ablation_point_idx_all::Vector{Vector{Int}}, 
-                            old_ablation_point_idx_all::Vector{Vector{Int}}, pos::Matrix{Float64})
+function find_new_bcs_idx(dh::Peridynamics.AbstractThreadsBodyDataHandler, index_new_ablation::Vector{Int}, 
+                            index_old_ablation::Vector{Int}, pos::Matrix{Float64})
 
-    index_new_ablation = collect(unique(Iterators.flatten(new_ablation_point_idx_all)))
-    index_old_ablation = collect(unique(Iterators.flatten(old_ablation_point_idx_all)))
     new_add_bcs_idx = Int[]
     idx_map = Dict{Int, Vector{Int}}() # map from ablation point to its neighbors
-    if !isempty(index_new_ablation)
-        n_radius = 1.1 * dh.chunks[1].paramsetup.δ
-        new_add_bcs_idx0, idx_map = find_neighbors_indices(pos, index_new_ablation, n_radius)
-        new_add_bcs_idx = setdiff(new_add_bcs_idx0, index_old_ablation) # remove the old ablation points
-    end
+    n_radius = dh.chunks[1].paramsetup.δ/3
+    new_add_bcs_idx, idx_map = find_neighbors_indices(pos, index_new_ablation, n_radius)
+    new_add_bcs_idx = setdiff(new_add_bcs_idx, index_old_ablation)
+
     return new_add_bcs_idx, idx_map
 end
 
