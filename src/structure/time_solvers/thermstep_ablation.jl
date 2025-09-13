@@ -154,8 +154,8 @@ function thermstep_ablation_pd!(dh::Peridynamics.AbstractThreadsBodyDataHandler,
             update_new_bcs!(dh.chunks[chunk_id], new_bcs_idx)
         end
         update_new_edges!(geo, index_new_ablation)
-        save_bc_edges_vtk(geo, options.root, n, Δt)
     end  
+    save_bc_edges_vtk(geo, options.root, n, Δt)
 
     @threads :static for chunk_id in eachindex(dh.chunks)
         Peridynamics.export_results(dh, options, chunk_id, n, t)
