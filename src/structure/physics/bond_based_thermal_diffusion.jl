@@ -179,6 +179,12 @@ end
         else
             cv = param.cv
         end
+        if isdefined(param, :ρ_T)
+            rho = param.ρ_T(param.rho, b.storage.temperature[1, point_id])
+        else
+            rho = param.rho
+        end
+
         k =  Δt / (param.rho * cv)
         _update_temperature!(b.storage.temperature, b.storage.pflux, b.storage.hsource, k, point_id)
     end
