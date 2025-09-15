@@ -74,28 +74,47 @@ function find_new_bcs_idx(dh::Peridynamics.AbstractThreadsBodyDataHandler, index
     return new_add_bcs_idx, idx_map
 end
 
-# new boundary occurs after ablation, energy from ablation is divided by neighbors!
-function update_new_bcs!(chunk::Peridynamics.AbstractBodyChunk, idx_map::Dict{Int, Vector{Int}}, new_ablation_point_idx::Vector{Int})
+# new boundary occurs after ablation, only for constant flux q_const!
+function update_new_bcs_q!(chunk::Peridynamics.AbstractBodyChunk, idx_map::Dict{Int, Vector{Int}}, new_ablation_point_idx::Vector{Int})
 
     for id in new_ablation_point_idx 
         ids_new_bcs = idx_map[id]
-        energy_add_aver = 0.0
+        q_const = zeros(1,1)
         if length(ids_new_bcs) > 0
-            energy_add_aver = chunk.paramsetup.energy 
+            q_const = chunk.storage.hsource[1, id] 
+            chunk.storage.hsource[1, id] .= 0.0
 
             for j in intersect(ids_new_bcs, chunk.system.chunk_handler.loc_points)
                 j_ch = chunk.system.chunk_handler.localizer[j]
-                chunk.storage.hsource[1, j_ch] = energy_add_aver
+                chunk.storage.hsource[1, j_ch] = q_const
             end
         end 
     end
 end
 
+# ablation energy source
 function update_new_bcs!(chunk::Peridynamics.AbstractBodyChunk, new_add_bcs_idx::Vector{Int})
 
     for id in intersect(new_add_bcs_idx, chunk.system.chunk_handler.loc_points) 
         i_ch = chunk.system.chunk_handler.localizer[id]
         chunk.storage.hsource[1, i_ch] = chunk.paramsetup.energy
+    end
+end
+
+# new boundary occurs after ablation, only for constant pressure p_const!
+function update_new_bcs_f!(chunk::Peridynamics.AbstractBodyChunk, idx_map::Dict{Int, Vector{Int}}, new_ablation_point_idx::Vector{Int})
+    for id in new_ablation_point_idx 
+        ids_new_bcs = idx_map[id]
+        p_const = zeros(3, 1)
+        if length(ids_new_bcs) > 0
+            p_const = chunk.storage.b_ext[:, id]
+            chunk.storage.b_ext[:, id] .= 0.0
+
+            for j in intersect(ids_new_bcs, chunk.system.chunk_handler.loc_points)
+                j_ch = chunk.system.chunk_handler.localizer[j]
+                chunk.storage.b_ext[:, j_ch] = p_const
+            end
+        end 
     end
 end
 #=

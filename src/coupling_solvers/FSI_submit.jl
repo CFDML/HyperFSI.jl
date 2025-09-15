@@ -316,6 +316,13 @@ function FSI_submit(job::Job, mode::String, geo::AbstractPDGeometry ; kwargs...)
             ret = TMA_submit_threads(job, nthreads(), geo)
         end
         return ret        
+    elseif mode == "DTMA" # dualstep_thermomech ablation in structure
+        if Peridynamics.mpi_run()
+            ret = DTMA_submit_mpi(job)
+        else 
+            ret = DTMA_submit_threads(job, nthreads(), geo)
+        end
+        return ret           
     end
 end
 
@@ -404,6 +411,24 @@ function TMA_submit_threads(job::Job, n_chunks::Int, geo::AbstractPDGeometry)
         Peridynamics.log_data_handler(job.options, dh)
         Peridynamics.log_timesolver(job.options, job.time_solver)
         solve_thermomech_struct_ablation!(dh, job, geo)
+    end
+    Peridynamics.log_simulation_duration(job.options, simulation_duration)
+    return dh
+end
+
+function DTMA_submit_threads(job::Job, n_chunks::Int, geo::AbstractPDGeometry)
+
+    simulation_duration = @elapsed begin
+        logo_init_logs(job.options)
+        Peridynamics.log_spatial_setup(job.options, job.spatial_setup)
+        Peridynamics.log_create_data_handler_start()
+        dh = Peridynamics.threads_data_handler(job.spatial_setup, job.time_solver, n_chunks)
+        Peridynamics.init_time_solver!(job.time_solver, dh)
+        Peridynamics.initialize!(dh, job.time_solver)
+        Peridynamics.log_create_data_handler_end()
+        Peridynamics.log_data_handler(job.options, dh)
+        Peridynamics.log_timesolver(job.options, job.time_solver)
+        solve_dual_thermomech_struct_ablation!(dh, job, geo)
     end
     Peridynamics.log_simulation_duration(job.options, simulation_duration)
     return dh

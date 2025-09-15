@@ -31,7 +31,7 @@ export BBTMaterial, BBTMMaterial, BBTTMaterial, BBTTAMaterial, BBTMAMaterial
 export hsource_bc!, hsource_databc!, temperature_ic!, temperature_bc!, temperature_databc!, second_bcs!, find_sec_bcs_points 
 
 # Running simulations
-export Thermstep, Thermomechstep, Dualstep, Thermstep_ablation, Thermomechstep_ablation, Flowstep, FSI_job, FSI_submit, IBM2D, Bcstruct
+export Thermstep, Thermomechstep, Dualstep, Thermstep_ablation, Thermomechstep_ablation, Dualstep_ablation, Flowstep, FSI_job, FSI_submit, IBM2D, Bcstruct
 
 
 include("IBM/boundary_counter.jl")
@@ -49,6 +49,7 @@ include("structure/time_solvers/thermomechstep.jl")
 include("structure/time_solvers/dual_timesteps.jl")
 include("structure/time_solvers/thermstep_ablation.jl")
 include("structure/time_solvers/thermomechstep_ablation.jl")
+include("structure/time_solvers/dual_timesteps_ablation.jl")
 
 include("structure/physics/bond_based_thermal_diffusion.jl")
 include("structure/physics/bond_based_thermomechanics.jl")
@@ -56,6 +57,7 @@ include("structure/physics/bond_based_dualstep_thermomechanics.jl")
 include("structure/physics/bond_based_thermal_diffusion_temp_dependent.jl")
 include("structure/physics/bond_based_thermal_diffusion_ablation.jl")
 include("structure/physics/bond_based_thermomechanics_ablation.jl")
+include("structure/physics/bond_based_dualstep_thermomechanics_ablation.jl")
 
 include("fluid/FlowTimesolver.jl")
 include("fluid/Evolution.jl")
