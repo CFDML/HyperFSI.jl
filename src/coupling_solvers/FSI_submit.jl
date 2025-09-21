@@ -46,6 +46,14 @@ function FSI_submit(job::FSI_job, bcst::Bcstruct, geo::AbstractPDGeometry, mode:
             ret = submit_threads_thermomech_ablation(job, bcst, geo, nthreads(); output = output, output_vars = output_vars, ref = ref)
         end
         return ret        
+
+    elseif mode == "Tanis" # anisotropic thermal in structure; Uncompleted module
+        if Peridynamics.mpi_run()
+            ret = submit_mpi_therm_anis(job)
+        else 
+            ret = submit_threads_therm_anis(job, bcst, geo, nthreads(); output = output, output_vars = output_vars, ref = ref)
+        end
+        return ret            
     end
 
 end
@@ -276,6 +284,37 @@ function FSI_submit(job::Job, mode::String, geo::AbstractPDGeometry ; kwargs...)
     Peridynamics.check_kwargs(o, SUBMIT_KWARGS)
     quiet = Peridynamics.get_submit_options(o)
     Peridynamics.set_quiet!(quiet)
+
+    if mode == "TA" # thermal ablation in structure
+        if Peridynamics.mpi_run()
+            ret = TA_submit_mpi(job)
+        else 
+            ret = TA_submit_threads(job, nthreads(), geo)
+        end
+        return ret
+
+    elseif mode == "TMA" # thermomech ablation in structure
+        if Peridynamics.mpi_run()
+            ret = TMA_submit_mpi(job)
+        else 
+            ret = TMA_submit_threads(job, nthreads(), geo)
+        end
+        return ret        
+    elseif mode == "DTMA" # dualstep_thermomech ablation in structure
+        if Peridynamics.mpi_run()
+            ret = DTMA_submit_mpi(job)
+        else 
+            ret = DTMA_submit_threads(job, nthreads(), geo)
+        end
+        return ret          
+    end
+end
+
+function FSI_submit(job::Job, mode::String; kwargs...)
+    o = Dict{Symbol,Any}(kwargs)
+    Peridynamics.check_kwargs(o, SUBMIT_KWARGS)
+    quiet = Peridynamics.get_submit_options(o)
+    Peridynamics.set_quiet!(quiet)
     
     if mode == "T" # thermal diffusion in structure
         if Peridynamics.mpi_run()
@@ -301,28 +340,13 @@ function FSI_submit(job::Job, mode::String, geo::AbstractPDGeometry ; kwargs...)
         end
         return ret
 
-    elseif mode == "TA" # thermal ablation in structure
+    elseif mode == "Tanis" # thermal diffusion in structure
         if Peridynamics.mpi_run()
-            ret = TA_submit_mpi(job)
+            ret = Tanis_submit_mpi(job)
         else 
-            ret = TA_submit_threads(job, nthreads(), geo)
-        end
-        return ret
-
-    elseif mode == "TMA" # thermomech ablation in structure
-        if Peridynamics.mpi_run()
-            ret = TMA_submit_mpi(job)
-        else 
-            ret = TMA_submit_threads(job, nthreads(), geo)
+            ret = Tanis_submit_threads(job, nthreads())
         end
         return ret        
-    elseif mode == "DTMA" # dualstep_thermomech ablation in structure
-        if Peridynamics.mpi_run()
-            ret = DTMA_submit_mpi(job)
-        else 
-            ret = DTMA_submit_threads(job, nthreads(), geo)
-        end
-        return ret           
     end
 end
 
@@ -429,6 +453,24 @@ function DTMA_submit_threads(job::Job, n_chunks::Int, geo::AbstractPDGeometry)
         Peridynamics.log_data_handler(job.options, dh)
         Peridynamics.log_timesolver(job.options, job.time_solver)
         solve_dual_thermomech_struct_ablation!(dh, job, geo)
+    end
+    Peridynamics.log_simulation_duration(job.options, simulation_duration)
+    return dh
+end
+
+function Tanis_submit_threads(job::Job, n_chunks::Int)
+
+    simulation_duration = @elapsed begin
+        logo_init_logs(job.options)
+        Peridynamics.log_spatial_setup(job.options, job.spatial_setup)
+        Peridynamics.log_create_data_handler_start()
+        dh = Peridynamics.threads_data_handler(job.spatial_setup, job.time_solver, n_chunks)
+        Peridynamics.init_time_solver!(job.time_solver, dh)
+        Peridynamics.initialize!(dh, job.time_solver)
+        Peridynamics.log_create_data_handler_end()
+        Peridynamics.log_data_handler(job.options, dh)
+        Peridynamics.log_timesolver(job.options, job.time_solver)
+        solve_therm_struct_anis!(dh, job)
     end
     Peridynamics.log_simulation_duration(job.options, simulation_duration)
     return dh
