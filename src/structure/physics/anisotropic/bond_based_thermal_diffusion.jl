@@ -124,43 +124,43 @@ end
     @pointfield hsource::Matrix{Float64}
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:position})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:position})
     return copy(system.position)
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:displacement})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:displacement})
     return zeros(3, Peridynamics.get_n_loc_points(system))
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:velocity})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:velocity})
     return zeros(3, Peridynamics.get_n_loc_points(system))
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:velocity_half})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:velocity_half})
     return zeros(3, Peridynamics.get_n_loc_points(system))
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:acceleration})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:acceleration})
     return zeros(3, Peridynamics.get_n_loc_points(system))
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:b_int})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:b_int})
     return zeros(3, Peridynamics.get_n_loc_points(system))
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:b_ext})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:b_ext})
     return zeros(3, Peridynamics.get_n_loc_points(system))
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:temperature})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:temperature})
     return zeros(1, Peridynamics.size(system.position, 2))
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:pflux})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:pflux})
     return zeros(1, Peridynamics.get_n_loc_points(system))
 end
 
-function Peridynamics.init_field_solver(::Thermstep_ansi, system::Peridynamics.AbstractSystem, ::Val{:hsource})
+function Peridynamics.init_field_solver(::Thermstep_anis, system::Peridynamics.AbstractSystem, ::Val{:hsource})
     return zeros(1, Peridynamics.get_n_loc_points(system))
 end
 

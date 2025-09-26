@@ -31,7 +31,7 @@ export BBTMaterial, BBTMMaterial, BBTTMaterial, BBTTAMaterial, BBTMAMaterial, BB
 export hsource_bc!, hsource_databc!, temperature_ic!, temperature_bc!, temperature_databc!, second_bcs!, find_sec_bcs_points 
 
 # Running simulations
-export Thermstep, Thermomechstep, Dualstep, Thermstep_ablation, Thermomechstep_ablation, Dualstep_ablation, Thermstep_ansi, 
+export Thermstep, Thermomechstep, Dualstep, Thermstep_ablation, Thermomechstep_ablation, Dualstep_ablation, Thermstep_anis, 
         Flowstep, FSI_job, FSI_submit, IBM2D, Bcstruct
 
 

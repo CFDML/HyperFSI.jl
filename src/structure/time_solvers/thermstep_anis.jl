@@ -1,13 +1,13 @@
 """
-    Thermstep_ansi(; kwargs...) for Anisotropic_thermal_timestep.
+    Thermstep_anis(; kwargs...) for Anisotropic_thermal_timestep.
 """
-mutable struct Thermstep_ansi <: Peridynamics.AbstractTimeSolver
+mutable struct Thermstep_anis <: Peridynamics.AbstractTimeSolver
     end_time::Float64
     n_steps::Int
     Δt::Float64
     safety_factor::Float64
 
-    function Thermstep_ansi(; time::Real=-1, steps::Int=-1, stepsize::Real=-1, safety_factor::Real=0.7)
+    function Thermstep_anis(; time::Real=-1, steps::Int=-1, stepsize::Real=-1, safety_factor::Real=0.7)
         if time < 0 && steps < 0
             msg = "specify either time or number of steps!"
             throw(ArgumentError(msg))
@@ -23,7 +23,7 @@ mutable struct Thermstep_ansi <: Peridynamics.AbstractTimeSolver
     end
 end
 
-function Base.show(io::IO, @nospecialize(vv::Thermstep_ansi))
+function Base.show(io::IO, @nospecialize(vv::Thermstep_anis))
     print(io, typeof(vv))
     fields = Vector{Symbol}()
     for field in fieldnames(typeof(vv))
@@ -36,7 +36,7 @@ function Base.show(io::IO, @nospecialize(vv::Thermstep_ansi))
     return nothing
 end
 
-function Base.show(io::IO, ::MIME"text/plain", @nospecialize(vv::Thermstep_ansi))
+function Base.show(io::IO, ::MIME"text/plain", @nospecialize(vv::Thermstep_anis))
     if get(io, :compact, false)
         show(io, vv)
     else
@@ -53,7 +53,7 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(vv::Thermstep_ansi)
     return nothing
 end
 
-function Peridynamics.init_time_solver!(vv::Thermstep_ansi, dh::Peridynamics.AbstractDataHandler)
+function Peridynamics.init_time_solver!(vv::Thermstep_anis, dh::Peridynamics.AbstractDataHandler)
     if vv.Δt < 0
         vv.Δt = calc_stable_timestep_th(dh, vv.safety_factor)
     else
@@ -74,7 +74,7 @@ function Peridynamics.init_time_solver!(vv::Thermstep_ansi, dh::Peridynamics.Abs
     return nothing
 end
 
-function Thermstep_check(vv::Thermstep_ansi)
+function Thermstep_check(vv::Thermstep_anis)
     if vv.end_time < 0
         error("`end_time` of Thermstep smaller than zero!\n")
     end
@@ -130,20 +130,20 @@ function thermstep_pd!(dh::Peridynamics.AbstractThreadsBodyDataHandler, options:
     return nothing
 end
 
-function Peridynamics.req_point_data_fields_timesolver(::Type{<:Thermstep_ansi})
+function Peridynamics.req_point_data_fields_timesolver(::Type{<:Thermstep_anis})
     fields = (:position, :temperature, :pflux, :hsource)
     return fields
 end
 
-function Peridynamics.req_bond_data_fields_timesolver(::Type{<:Thermstep_ansi})
+function Peridynamics.req_bond_data_fields_timesolver(::Type{<:Thermstep_anis})
     return ()
 end
 
-function Peridynamics.req_data_fields_timesolver(::Type{<:Thermstep_ansi})
+function Peridynamics.req_data_fields_timesolver(::Type{<:Thermstep_anis})
     return ()
 end
 
-function Peridynamics.log_timesolver(options::Peridynamics.AbstractJobOptions, vv::Thermstep_ansi)
+function Peridynamics.log_timesolver(options::Peridynamics.AbstractJobOptions, vv::Thermstep_anis)
     msg = "VELOCITY VERLET TIME SOLVER\n"
     msg *= Peridynamics.msg_qty("number of time steps", vv.n_steps)
     msg *= Peridynamics.msg_qty("time step size", vv.Δt)
