@@ -347,6 +347,15 @@ function FSI_submit(job::Job, mode::String; kwargs...)
             ret = Tanis_submit_threads(job, nthreads())
         end
         return ret        
+
+    elseif mode == "Tosb" # thermal diffusion in structure with OSB
+        if Peridynamics.mpi_run()
+            ret = Tosb_submit_mpi(job)
+        else 
+            ret = Tosb_submit_threads(job, nthreads())
+        end
+        return ret
+
     end
 end
 
@@ -471,6 +480,24 @@ function Tanis_submit_threads(job::Job, n_chunks::Int)
         Peridynamics.log_data_handler(job.options, dh)
         Peridynamics.log_timesolver(job.options, job.time_solver)
         solve_therm_struct_anis!(dh, job)
+    end
+    Peridynamics.log_simulation_duration(job.options, simulation_duration)
+    return dh
+end
+
+function Tosb_submit_threads(job::Job, n_chunks::Int)
+
+    simulation_duration = @elapsed begin
+        logo_init_logs(job.options)
+        Peridynamics.log_spatial_setup(job.options, job.spatial_setup)
+        Peridynamics.log_create_data_handler_start()
+        dh = Peridynamics.threads_data_handler(job.spatial_setup, job.time_solver, n_chunks)
+        Peridynamics.init_time_solver!(job.time_solver, dh)
+        Peridynamics.initialize!(dh, job.time_solver)
+        Peridynamics.log_create_data_handler_end()
+        Peridynamics.log_data_handler(job.options, dh)
+        Peridynamics.log_timesolver(job.options, job.time_solver)
+        solve_therm_struct_osb!(dh, job)
     end
     Peridynamics.log_simulation_duration(job.options, simulation_duration)
     return dh

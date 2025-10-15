@@ -173,15 +173,6 @@ function Peridynamics.Peridynamics.allowed_material_kwargs(::BBTxyMaterial)
     return (thermal_anisotropic_kwargs())
 end
 
-function calc_pflux!(chunk::Peridynamics.AbstractBodyChunk)
-    (; system, mat, paramsetup, storage) = chunk
-    storage.pflux .= 0.0
-    storage.n_active_bonds .= 0
-    for point_id in eachindex(chunk.system.chunk_handler.loc_points)
-        pflux_point!(storage, system, mat, paramsetup, point_id)
-    end
-    return nothing
-end
 
 function pflux_point!(storage::BBTxyStorage, system::Peridynamics.BondSystem, 
     ::BBTxyMaterial, param::BBTxyPointParameters, i::Int) 
