@@ -54,6 +54,11 @@ struct Post3D
         
         # Convert vol to vector for consistency
         vol_vec = vec(vol)
+
+        # Check and fix boundary watertightness
+        if !isempty(bc_surface)
+            check_and_fix_boundary_watertightness_3d!(bc_surface)
+        end
         
         new(bc_nodes, pos, vol_vec, in_bc_nodes, bc_surface)
     end
@@ -333,4 +338,207 @@ function tetvol(a::Vector{Float64}, b::Vector{Float64}, c::Vector{Float64}, d::V
     return vol
 end
 
+#Check and fix boundary watertightness and orientation for 3D surfaces.
+#Modifies bc_surface dict values in-place while preserving keys.
+function check_and_fix_boundary_watertightness_3d!(bc_surface::Dict{Int, Vector{Vector{Vector{Float64}}}})
+    println("\n=== Checking 3D Boundary Watertightness ===")
+    
+    # Extract all boundary faces
+    point_coords = Dict{Tuple{Float64, Float64, Float64}, Int}()
+    point_id_to_coords = Dict{Int, Vector{Float64}}()
+    point_counter = 0
+    
+    all_faces = []  # [(pd_id, face_idx, face_vertices)]
+    
+    for (pd_id, faces) in bc_surface
+        for (face_idx, face) in enumerate(faces)
+            if length(face) < 3
+                @warn "Face $face_idx in pd_id $pd_id has < 3 vertices. Skipping."
+                continue
+            end
+            
+            push!(all_faces, (pd_id, face_idx, face))
+            
+            # Register points
+            for point in face
+                coord_tuple = (round(point[1], digits=8), round(point[2], digits=8), round(point[3], digits=8))
+                if !haskey(point_coords, coord_tuple)
+                    point_counter += 1
+                    point_coords[coord_tuple] = point_counter
+                    point_id_to_coords[point_counter] = point
+                end
+            end
+        end
+    end
+    
+    println("Info: Found $(point_counter) unique points, $(length(all_faces)) faces")
+    
+    if point_counter < 4
+        error("ERROR: Too few points ($(point_counter)) to form a valid 3D boundary!")
+    end
+    
+    # Build edge-to-faces mapping for manifold check
+    edge_to_faces = Dict{Tuple{Int, Int}, Vector{Int}}()
+    
+    for (face_id, (pd_id, face_idx, face)) in enumerate(all_faces)
+        n = length(face)
+        for i in 1:n
+            p1_coord = (round(face[i][1], digits=8), round(face[i][2], digits=8), round(face[i][3], digits=8))
+            p2_coord = (round(face[i % n + 1][1], digits=8), round(face[i % n + 1][2], digits=8), round(face[i % n + 1][3], digits=8))
+            
+            u = point_coords[p1_coord]
+            v = point_coords[p2_coord]
+            
+            # Use sorted edge (undirected)
+            edge = u < v ? (u, v) : (v, u)
+            
+            if !haskey(edge_to_faces, edge)
+                edge_to_faces[edge] = Int[]
+            end
+            push!(edge_to_faces[edge], face_id)
+        end
+    end
+    
+    # Check manifold: each edge must be shared by exactly 2 faces
+    non_manifold_edges = 0
+    for (edge, faces) in edge_to_faces
+        if length(faces) != 2
+            non_manifold_edges += 1
+            if non_manifold_edges <= 5
+                p1 = point_id_to_coords[edge[1]]
+                p2 = point_id_to_coords[edge[2]]
+                @warn "Non-manifold edge: $(edge[1])-$(edge[2]) shared by $(length(faces)) faces"
+            end
+        end
+    end
+    
+    if non_manifold_edges > 0
+        error("GEOMETRY ERROR: Found $non_manifold_edges non-manifold edges! " *
+              "Boundary must be a closed manifold surface.")
+    end
+    
+    println("✓ Topology valid: closed manifold surface (each edge shared by 2 faces)")
+    
+    # Calculate geometric center
+    center = zeros(3)
+    for coord in values(point_id_to_coords)
+        center .+= coord
+    end
+    center ./= point_counter
+    println("Geometric center: [$(center[1]), $(center[2]), $(center[3])]")
+    
+    # Check and fix face orientations
+    fixed_count = 0
+    
+    for (pd_id, face_idx, face) in all_faces
+        n = length(face)
+        
+        # Calculate face center
+        face_center = zeros(3)
+        for vertex in face
+            face_center .+= vertex
+        end
+        face_center ./= n
+        
+        # Calculate face normal using cross product
+        v1 = face[2] .- face[1]
+        v2 = face[3] .- face[1]
+        normal = cross(v1, v2)
+        len = norm(normal)
+        len > 1e-10 && (normal ./= len)
+        
+        # Vector from geometric center to face center
+        outward_dir = face_center .- center
+        
+        # Check if normal points outward
+        if dot(normal, outward_dir) < 0
+            # Normal points inward, flip face vertex order
+            reverse!(face)
+            bc_surface[pd_id][face_idx] = face
+            fixed_count += 1
+        end
+    end
+    
+    println("Info: Fixed $fixed_count face orientations")
+    
+    # Generate visualization
+    export_boundary_vtk_3d(bc_surface, "boundary_corrected.vtk")
+    
+    println("=== 3D Boundary Check Complete ===\n")
+    
+    return fixed_count
+end
+
+#Export 3D boundary surface to VTK format with outward normal vectors.
+#Open in ParaView and use 'Glyph' filter to visualize normals.
+function export_boundary_vtk_3d(bc_surface::Dict{Int, Vector{Vector{Vector{Float64}}}}, 
+                             filename::String="boundary.vtk")
+    println("Exporting 3D boundary to VTK format...")
+    
+    # Collect unique points and faces
+    point_map = Dict{Tuple{Float64, Float64, Float64}, Int}()
+    points = Vector{Float64}[]
+    faces = Vector{Int}[]
+    normals = Vector{Float64}[]
+    
+    for (pd_id, face_list) in bc_surface
+        for face in face_list
+            length(face) < 3 && continue
+            
+            indices = Int[]
+            for vertex in face
+                key = (vertex[1], vertex[2], vertex[3])
+                if !haskey(point_map, key)
+                    point_map[key] = length(points)
+                    push!(points, vertex)
+                end
+                push!(indices, point_map[key])
+            end
+            push!(faces, indices)
+            
+            # Calculate face normal
+            v1 = face[2] .- face[1]
+            v2 = face[3] .- face[1]
+            normal = cross(v1, v2)
+            len = norm(normal)
+            len > 1e-10 && (normal ./= len)
+            push!(normals, normal)
+        end
+    end
+    
+    # Write VTK file
+    open(filename, "w") do io
+        println(io, "# vtk DataFile Version 3.0")
+        println(io, "3D Boundary surface with normals")
+        println(io, "ASCII")
+        println(io, "DATASET POLYDATA")
+        println(io, "POINTS $(length(points)) float")
+        
+        for p in points
+            println(io, "$(p[1]) $(p[2]) $(p[3])")
+        end
+        
+        # Count total indices needed
+        total_indices = sum(length(f) + 1 for f in faces)
+        
+        println(io, "\nPOLYGONS $(length(faces)) $total_indices")
+        for f in faces
+            print(io, "$(length(f))")
+            for idx in f
+                print(io, " $idx")
+            end
+            println(io)
+        end
+        
+        # Add normal vectors as CELL_DATA
+        println(io, "\nCELL_DATA $(length(faces))")
+        println(io, "VECTORS normal float")
+        for n in normals
+            println(io, "$(n[1]) $(n[2]) $(n[3])")
+        end
+    end
+    
+    println("✓ VTK file saved to: $filename")
+    println("  Open in ParaView -> Filters -> Glyph -> Vectors: 'normal', Glyph Type: 'Arrow'")
+end
 

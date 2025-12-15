@@ -1,3 +1,4 @@
+
 struct Post2D
     bc_nodes::Vector{Int}
     pos::Matrix{Float64}
@@ -54,6 +55,10 @@ struct Post2D
         
         # Convert area to vector for consistency
         area_vec = vec(area)
+
+        if !isempty(bc_edge)
+            check_and_fix_boundary_watertightness!(bc_edge)
+        end
         
         new(bc_nodes, pos, area_vec, in_bc_nodes, bc_edge)
     end
@@ -320,4 +325,210 @@ function mesh_to_nodes_2d(nodes::Dict{Int, Vector{Float64}}, surface_elements::D
     return pos, area, mesh_node_ids
 end
 
+# Check and fix boundary watertightness and orientation.
+# Modifies bc_edge dict values in-place while preserving keys.
+function check_and_fix_boundary_watertightness!(bc_edge::Dict{Int, Vector{Vector{Vector{Float64}}}})
+    println("\n=== Checking Boundary Watertightness ===")
+    
+    # Extract all boundary segments and build point mapping
+    point_coords = Dict{Tuple{Float64, Float64}, Int}()
+    point_id_to_coords = Dict{Int, Vector{Float64}}()
+    point_counter = 0
+    
+    all_segments = []
+    
+    for (pd_id, segments) in bc_edge
+        for (seg_idx, segment) in enumerate(segments)
+            length(segment) != 2 && continue
+            
+            push!(all_segments, (pd_id, seg_idx, segment))
+            
+            # Register points (using x,y only, ignore z)
+            for point in segment
+                coord_tuple = (round(point[1], digits=8), round(point[2], digits=8))
+                if !haskey(point_coords, coord_tuple)
+                    point_counter += 1
+                    point_coords[coord_tuple] = point_counter
+                    point_id_to_coords[point_counter] = point
+                end
+            end
+        end
+    end
+    
+    println("Info: Found $(point_counter) unique points, $(length(all_segments)) segments")
+    
+    if point_counter < 3
+        error("ERROR: Too few points ($(point_counter)) to form a valid boundary!")
+    end
+    
+    # Build undirected adjacency graph
+    adj = Dict{Int, Vector{Int}}()
+    for id in 1:point_counter
+        adj[id] = Int[]
+    end
+    
+    for (pd_id, seg_idx, segment) in all_segments
+        p1_coord = (round(segment[1][1], digits=8), round(segment[1][2], digits=8))
+        p2_coord = (round(segment[2][1], digits=8), round(segment[2][2], digits=8))
+        
+        u = point_coords[p1_coord]
+        v = point_coords[p2_coord]
+        
+        if !(v in adj[u])
+            push!(adj[u], v)
+        end
+        if !(u in adj[v])
+            push!(adj[v], u)
+        end
+    end
+    
+    # Check topology: all points must have degree 2
+    for (id, neighbors) in adj
+        if length(neighbors) != 2
+            coord = point_id_to_coords[id]
+            error("GEOMETRY ERROR: Point $id at ($(coord[1]), $(coord[2])) has degree $(length(neighbors)). " *
+                  "Boundary must be a simple closed loop!")
+        end
+    end
+    
+    println("✓ Topology valid: all points have degree 2")
+    
+    # Trace closed loop
+    ordered_points = Int[]
+    start_node = 1
+    curr = start_node
+    prev = -1
+    
+    for _ in 1:point_counter
+        push!(ordered_points, curr)
+        neighbors = adj[curr]
+        next_node = (neighbors[1] == prev) ? neighbors[2] : neighbors[1]
+        prev = curr
+        curr = next_node
+    end
+    
+    println("✓ Traced closed loop with $(length(ordered_points)) points")
+    
+    # Calculate signed area using Shoelace formula (2D projection on xy-plane)
+    area = 0.0
+    n = length(ordered_points)
+    for i in 1:n
+        p1 = point_id_to_coords[ordered_points[i]]
+        p2 = point_id_to_coords[ordered_points[i % n + 1]]
+        area += p1[1] * p2[2] - p2[1] * p1[2]
+    end
+    area /= 2.0
+    
+    println("Signed area: $area, Absolute area: $(abs(area))")
+    
+    # Ensure counter-clockwise orientation
+    if area < 0
+        println("⚠ Reversing from clockwise to counter-clockwise")
+        reverse!(ordered_points)
+    else
+        println("✓ Orientation is counter-clockwise")
+    end
+    
+    # Build correct directed edge set
+    correct_edges = Set{Tuple{Int, Int}}()
+    for i in 1:n
+        u = ordered_points[i]
+        v = ordered_points[i % n + 1]
+        push!(correct_edges, (u, v))
+    end
+    
+    # Fix segment directions in bc_edge (in-place modification)
+    fixed_count = 0
+    
+    for (pd_id, seg_idx, segment) in all_segments
+        p1_coord = (round(segment[1][1], digits=8), round(segment[1][2], digits=8))
+        p2_coord = (round(segment[2][1], digits=8), round(segment[2][2], digits=8))
+        
+        u = point_coords[p1_coord]
+        v = point_coords[p2_coord]
+        
+        if (u, v) in correct_edges
+            # Direction correct, no change needed
+        elseif (v, u) in correct_edges
+            # Flip direction
+            bc_edge[pd_id][seg_idx] = [segment[2], segment[1]]
+            fixed_count += 1
+        else
+            @warn "Segment $seg_idx in pd_id $pd_id is not part of the traced loop!"
+        end
+    end
+    
+    println("Info: Fixed $fixed_count segment directions")
+    
+    # Generate visualization
+    export_boundary_vtk(bc_edge, "boundary_corrected.vtk")
+    
+    println("=== Boundary Check Complete ===\n")
+    
+    return fixed_count
+end
 
+#Export boundary to VTK format with outward normal vectors.
+#Open in ParaView and use 'Glyph' filter to visualize normals.
+function export_boundary_vtk(bc_edge::Dict{Int, Vector{Vector{Vector{Float64}}}}, 
+                             filename::String="boundary.vtk")
+    println("Exporting boundary to VTK format...")
+    
+    # Collect unique points and segments
+    point_map = Dict{Tuple{Float64, Float64, Float64}, Int}()
+    points = Vector{Float64}[]
+    lines = Tuple{Int, Int}[]
+    normals = Vector{Float64}[]
+    
+    for (pd_id, segments) in bc_edge
+        for segment in segments
+            length(segment) != 2 && continue
+            
+            indices = Int[]
+            for point in segment
+                key = (point[1], point[2], point[3])
+                if !haskey(point_map, key)
+                    point_map[key] = length(points)
+                    push!(points, point)
+                end
+                push!(indices, point_map[key])
+            end
+            push!(lines, (indices[1], indices[2]))
+            
+            # Calculate outward normal (90° CW rotation for CCW boundary)
+            dir = segment[2] .- segment[1]
+            normal = [dir[2], -dir[1], 0.0]
+            len = sqrt(normal[1]^2 + normal[2]^2)
+            len > 1e-10 && (normal ./= len)
+            push!(normals, normal)
+        end
+    end
+    
+    # Write VTK file
+    open(filename, "w") do io
+        println(io, "# vtk DataFile Version 3.0")
+        println(io, "Boundary edges with normals")
+        println(io, "ASCII")
+        println(io, "DATASET POLYDATA")
+        println(io, "POINTS $(length(points)) float")
+        
+        for p in points
+            println(io, "$(p[1]) $(p[2]) $(p[3])")
+        end
+        
+        println(io, "\nLINES $(length(lines)) $(length(lines) * 3)")
+        for (i, j) in lines
+            println(io, "2 $i $j")
+        end
+        
+        # Add normal vectors as CELL_DATA
+        println(io, "\nCELL_DATA $(length(lines))")
+        println(io, "VECTORS normal float")
+        for n in normals
+            println(io, "$(n[1]) $(n[2]) $(n[3])")
+        end
+    end
+    
+    println("✓ VTK file saved to: $filename")
+    println("  Open in ParaView -> Filters -> Glyph -> Vectors: 'normal', Glyph Type: 'Arrow'")
+end
