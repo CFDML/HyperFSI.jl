@@ -41,6 +41,33 @@ using HyperFSI
 ```
 
 
+### Pre-processing: INP meshes and physical groups
+`Post2D` / `Post3D` read standard `.inp` meshes (Gmsh, Abaqus/CAE, CalculiX): any keyword case,
+comments, continuation lines, `GENERATE`, `*INCLUDE`, `*PART`/`*INSTANCE` assemblies,
+linear and quadratic tri/quad/tet/pyramid/wedge/hex elements. Boundaries and materials are
+selected by the **physical groups** of the file (`*ELSET`, `*NSET`, `*SURFACE`) instead of
+coordinates:
+
+```julia
+mesh = read_inp("probe.inp")
+println(mesh)                          # lists every group: name, size, dimension, material
+
+geo  = Post2D(mesh; boundary = ["Wall"])           # outer boundary used by the IBM coupling
+# geo = Post2D(mesh)                               # default: every free edge of the mesh
+sets = pd_sets(mesh, geo)              # Dict(:Steel => PD ids, :Copper => ..., :Wall => ...)
+
+body = Body(BBTMMaterial(), geo.pos, h .* geo.area)
+point_set!(body, :Cu, sets[:Copper])
+material!(body, :Cu; horizon = r_h, E = 1.1e11, ...)
+point_set!(body, :cool, sets[:CoolingEdge])        # PD points next to a boundary group
+temperature_bc!(t -> 298.0, body, :cool)
+```
+
+A boundary group may be an ELSET of line/face elements (Gmsh physical line/surface), an
+ELSET of domain elements (their free edges/faces), a `*SURFACE` (`elset, S1`) or an `*NSET`.
+Boundary normals are oriented outward per element, so non-convex bodies and holes are handled.
+The old call `Post2D("mesh.inp", ["Line1", "Line2"])` keeps working.
+
 ## Example usage
 ### Subsonic Flow Around a Deformable Cylinder with Thermomechanical Coupling
 

@@ -19,3 +19,19 @@
 end
 
 
+
+@testitem "Post2D keyword interface" begin
+    using HyperFSI: Post2D, read_inp, pd_sets
+    mesh_file = joinpath(@__DIR__, "..", "test_data", "squ.inp")
+    geo_all = Post2D(mesh_file; vtk=nothing)                       # all free edges
+    geo_old = Post2D(mesh_file, ["Line1", "Line2", "Line3", "Line4"])
+    @test geo_all.pos == geo_old.pos
+    @test geo_all.bc_nodes == geo_old.bc_nodes
+    @test keys(geo_all.bc_edge) == keys(geo_old.bc_edge)
+    @test all(Set(geo_all.bc_edge[k]) == Set(geo_old.bc_edge[k]) for k in keys(geo_old.bc_edge))
+    mesh = read_inp(mesh_file; verbose=false)
+    sets = pd_sets(mesh, geo_all)
+    @test sets[:Surface1] == [1, 2, 3, 4]
+    @test length(sets[:Line1]) == 2
+    @test all(i -> geo_all.pos[2, i] < 0, sets[:Line1])
+end

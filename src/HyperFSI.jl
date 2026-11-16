@@ -17,7 +17,7 @@ using Dates
 abstract type AbstractFlowTimeSolver end
 
 # Pre processing
-export Post2D, Post3D
+export Post2D, Post3D, InpMesh, read_inp, pd_sets, domain_elements, section_materials
 
 # Coupling with DSMC_sparta
 #export glob, write_sprata_bc_file_2d, read_bc_from_sparta, write_sparta_files, writedlm, readdlm
@@ -33,6 +33,7 @@ export hsource_bc!, hsource_databc!, temperature_ic!, temperature_bc!, temperatu
 export Thermstep, Thermomechstep, Dualstep, Flowstep, FSI_job, FSI_submit, IBM2D, Bcstruct
 
 
+include("IBM/inp_reader.jl")
 include("IBM/post_2d.jl")
 include("IBM/post_3d.jl")
 include("IBM/ibm.jl")

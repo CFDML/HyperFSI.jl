@@ -1,0 +1,51 @@
+*Heading
+** Abaqus/CAE style input: part + translated instance, two materials,
+** element/node sets, element-based surfaces, lower-case keywords.
+*Preprint, echo=NO, model=NO, history=NO, contact=NO
+*Part, name=Part-1
+*Node
+      1,           0.,           0.
+      2,           1.,           0.
+      3,           2.,           0.
+      4,           0.,           1.
+      5,           1.,           1.
+      6,           2.,           1.
+*Element, type=CPS4R
+1, 1, 2, 5, 4
+2, 2, 3, 6, 5
+*Elset, elset=Steel
+ 1,
+*Elset, elset=Copper, generate
+ 2,  2,  1
+*Elset, elset=All
+ Steel, Copper
+*Nset, nset=LeftEdge
+ 1, 4
+*Elset, elset=_Wall_S1, internal
+ 1, 2
+*Surface, type=ELEMENT, name=Wall
+_Wall_S1, S1
+** Section: Section-1
+*Solid Section, elset=Steel, material=STEEL
+1.,
+*Solid Section, elset=Copper, material=COPPER
+1.,
+*End Part
+**
+*Assembly, name=Assembly
+*Instance, name=Part-1-1, part=Part-1
+          1.,           0.,           0.
+*End Instance
+*Nset, nset=Fix, instance=Part-1-1
+ 3, 6
+*Elset, elset=_Top_S3, internal, instance=Part-1-1
+ 1, 2
+*Surface, type=ELEMENT, name=Top
+_Top_S3, S3
+*End Assembly
+*Material, name=STEEL
+*Elastic
+ 2e11, 0.3
+*Step, name=Step-1
+*Static
+*End Step

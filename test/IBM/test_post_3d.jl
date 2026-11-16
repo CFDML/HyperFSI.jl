@@ -18,3 +18,20 @@
     @test_throws ErrorException Post3D("", ["OuterBoundary"])
 end
 
+
+@testitem "Post3D physical groups" begin
+    using HyperFSI: Post3D, read_inp, pd_sets
+    mesh_file = joinpath(@__DIR__, "..", "test_data", "vol.inp")
+    mesh = read_inp(mesh_file; verbose=false)
+    # Gmsh physical groups (*ELSET of surface elements) instead of entity names
+    geo = Post3D(mesh; boundary=["Bottom", "Top", "Front", "Back", "Left", "Right"], vtk=nothing)
+    @test sort(geo.bc_nodes) == collect(1:8)
+    @test sum(geo.vol) ≈ 1.0
+    # default: all free faces; physical volume as domain
+    geo2 = Post3D(mesh_file; domain=["Cube"], vtk=nothing)
+    @test sum(length, values(geo2.bc_surface)) == 24
+    sets = pd_sets(mesh, geo2; domain=["Cube"])
+    @test sets[:Cube] == collect(1:8)
+    @test length(sets[:Bottom]) == 4
+    @test all(i -> geo2.pos[3, i] < 0, sets[:Bottom])
+end
