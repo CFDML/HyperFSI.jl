@@ -685,13 +685,29 @@ domain elements. A group may be
 - an NSET (free faces whose corner nodes all lie in the set),
 - `:all` (every free face of the domain).
 """
-function _boundary_faces(m::InpMesh, dom::Vector{Int}, groups, dim::Int; warn::Bool=true)
-    domset = Set(dom)
+# Topology of the domain, built once and reused for every boundary group
+struct _FaceCtx
+    domset::Set{Int}
+    fm::Dict{Vector{Int},Vector{Tuple{Int,Int}}}          # sorted face nodes -> owners
+    node2dom::Dict{Int,Vector{Int}}                        # corner node -> domain elements
+    free::Vector{Tuple{Vector{Int},Int,Int}}               # free faces: (sorted nodes, element, local face)
+end
+
+function _face_ctx(m::InpMesh, dom::Vector{Int})
     fm = _face_map(m, dom)
     node2dom = Dict{Int,Vector{Int}}()
     for e in dom, nid in _corners(m, e)
         push!(get!(node2dom, nid, Int[]), e)
     end
+    free = [(key, owners[1][1], owners[1][2]) for (key, owners) in fm if length(owners) == 1]
+    return _FaceCtx(Set(dom), fm, node2dom, free)
+end
+
+function _boundary_faces(m::InpMesh, dom::Vector{Int}, groups, dim::Int; warn::Bool=true,
+                         ctx::_FaceCtx=_face_ctx(m, dom))
+    domset = ctx.domset
+    fm = ctx.fm
+    node2dom = ctx.node2dom
     result = Dict{Tuple{Int,Vector{Int}},Nothing}()   # ordered by insertion is not needed
     out = Tuple{Int,Vector{Int}}[]
     add!(e, f) = (key = (e, sort(f)); haskey(result, key) || (result[key] = nothing; push!(out, (e, f))))
@@ -717,9 +733,7 @@ function _boundary_faces(m::InpMesh, dom::Vector{Int}, groups, dim::Int; warn::B
     end
 
     if groups === :all || groups == "all" || groups == [:all]
-        for (key, owners) in fm
-            length(owners) == 1 || continue
-            e, k = owners[1]
+        for (_, e, k) in ctx.free
             add!(e, _element_faces(m, e)[k])
         end
         return sort!(out; by=x -> (x[1], sort(x[2])))
@@ -752,10 +766,8 @@ function _boundary_faces(m::InpMesh, dom::Vector{Int}, groups, dim::Int; warn::B
             end
         elseif (ns = _inp_find(m.nsets, name)) !== nothing
             nodeset = Set(ns)
-            for (key, owners) in fm
-                length(owners) == 1 || continue
+            for (key, e, k) in ctx.free
                 all(in(nodeset), key) || continue
-                e, k = owners[1]
                 add!(e, _element_faces(m, e)[k])
             end
         else
@@ -837,12 +849,13 @@ function pd_sets(m::InpMesh, geo; domain=nothing)
     isapprox(pos, geo.pos; atol=1e-10 * max(1.0, maximum(abs, pos))) ||
         error("pd_sets: PD points of geo do not match this mesh (was geo built from another file or domain?).")
     pd_of = Dict(e => i for (i, e) in enumerate(dom))
+    ctx = _face_ctx(m, dom)      # face topology built once for all groups
 
     sets = Dict{Symbol,Vector{Int}}()
     for name in keys(m.elsets)
         ids = [pd_of[e] for e in m.elsets[name] if haskey(pd_of, e)]
         if isempty(ids)
-            faces = _boundary_faces_quiet(m, dom, name, dim)
+            faces = _boundary_faces_quiet(m, dom, name, dim, ctx)
             ids = [pd_of[e] for (e, _) in faces]
         end
         isempty(ids) || (sets[Symbol(name)] = unique!(sort!(ids)))
@@ -850,14 +863,14 @@ function pd_sets(m::InpMesh, geo; domain=nothing)
     for dict in (m.surfaces, m.nsets)
         for name in keys(dict)
             haskey(sets, Symbol(name)) && continue
-            ids = [pd_of[e] for (e, _) in _boundary_faces_quiet(m, dom, name, dim)]
+            ids = [pd_of[e] for (e, _) in _boundary_faces_quiet(m, dom, name, dim, ctx)]
             isempty(ids) || (sets[Symbol(name)] = unique!(sort!(ids)))
         end
     end
     return sets
 end
 
-_boundary_faces_quiet(m, dom, name, dim) = _boundary_faces(m, dom, [name], dim; warn=false)
+_boundary_faces_quiet(m, dom, name, dim, ctx) = _boundary_faces(m, dom, [name], dim; warn=false, ctx=ctx)
 
 """
     section_materials(mesh::InpMesh) -> Dict{String,String}

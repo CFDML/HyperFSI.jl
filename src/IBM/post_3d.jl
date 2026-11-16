@@ -28,7 +28,8 @@ function Post3D(mesh::InpMesh; boundary=:all, inner_boundary=String[], domain=no
     println("PD points: $(length(dom)) (3D elements", domain === nothing ? "" : " of $(domain)", ")")
     println("Outer boundary: ", boundary === :all ? "all free faces" : join(string.(boundary isa AbstractVector ? boundary : [boundary]), ", "))
 
-    faces = _boundary_faces(mesh, dom, boundary, 3)
+    ctx = _face_ctx(mesh, dom)
+    faces = _boundary_faces(mesh, dom, boundary, 3; ctx=ctx)
     isempty(faces) && error("The outer boundary $(boundary) is empty.")
     bc_surface = Dict{Int, Vector{Vector{Vector{Float64}}}}()
     face_nodes = Tuple{Int,Vector{Int}}[]
@@ -41,7 +42,7 @@ function Post3D(mesh::InpMesh; boundary=:all, inner_boundary=String[], domain=no
 
     in_bc_nodes = Int[]
     if !(inner_boundary === nothing || isempty(inner_boundary))
-        in_faces = _boundary_faces(mesh, dom, inner_boundary, 3)
+        in_faces = _boundary_faces(mesh, dom, inner_boundary, 3; ctx=ctx)
         in_bc_nodes = unique!(sort!([pd_of[e] for (e, _) in in_faces]))
     end
 
